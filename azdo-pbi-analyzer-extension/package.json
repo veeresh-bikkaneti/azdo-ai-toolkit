@@ -1,7 +1,7 @@
 {
-    "name": "ai-initiative-scaffolder",
-    "displayName": "AI Initiative Scaffolder",
-    "description": "Instantly scaffold the AI Initiative Documentation Suite into your workspace.",
+    "name": "azdo-pbi-analyzer-extension",
+    "displayName": "Azure DevOps PBI Analyzer",
+    "description": "Scaffold AI agents, workflows, and templates for Azure DevOps PBI analysis and test automation.",
     "version": "1.1.0",
     "publisher": "RUNTechnologyConsultingServicesLLC",
     "repository": {
