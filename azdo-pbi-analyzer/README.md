@@ -42,11 +42,29 @@ dotnet build
 
 ## ⚙️ Configuration
 
-Set your PAT in the environment or pass it via CLI:
+**Security Best Practice**: Store your PAT in a `.env` file (never commit to git).
 
-```powershell
-$env:AZURE_DEVOPS_PAT="your_pat_token"
+### Step 1: Create `.env` File
+
+```bash
+# Copy the example
+cp .env.example .env
+
+# Edit .env and add your PAT
+# .env
+AZURE_DEVOPS_PAT=your_personal_access_token_here
 ```
+
+### Step 2: Generate Your PAT
+
+1. Go to: https://dev.azure.com/{your-org}/_usersSettings/tokens
+2. Click **"New Token"**
+3. Name: `azdo-pbi-analyzer`
+4. Scopes: **Work Items (Read)**
+5. Copy the token and paste into `.env`
+
+> [!IMPORTANT]
+> The `.env` file is automatically ignored by git. Your PAT stays on your machine.
 
 ## 📖 Usage
 

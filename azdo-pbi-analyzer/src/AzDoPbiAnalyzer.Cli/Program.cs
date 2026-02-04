@@ -4,6 +4,7 @@ using AzDoPbiAnalyzer.Core.Analyzers;
 using AzDoPbiAnalyzer.Core.Generators;
 using AzDoPbiAnalyzer.Core.Models;
 using AzDoPbiAnalyzer.Core.Utils;
+using dotenv.net;
 
 namespace AzDoPbiAnalyzer.Cli;
 
@@ -11,6 +12,8 @@ class Program
 {
     static async Task<int> Main(string[] args)
     {
+        // Load .env file if it exists (PAT and other secrets)
+        DotEnv.Load(options: new DotEnvOptions(ignoreExceptions: true));
         var urlOption = new Option<string>(
             name: "--url", 
             description: "The Azure DevOps PBI URL")
@@ -81,7 +84,12 @@ class Program
 
             if (string.IsNullOrEmpty(pat))
             {
-                Console.WriteLine("Error: PAT is required (via --pat or AZURE_DEVOPS_PAT env var)");
+                Console.WriteLine("Error: PAT is required.");
+                Console.WriteLine("Please provide via:");
+                Console.WriteLine("  1. --pat flag");
+                Console.WriteLine("  2. AZURE_DEVOPS_PAT in .env file");
+                Console.WriteLine("  3. AZURE_DEVOPS_PAT environment variable");
+                Console.WriteLine("\nSee .env.example for template.");
                 return;
             }
 
