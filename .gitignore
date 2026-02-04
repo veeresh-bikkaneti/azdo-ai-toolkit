@@ -33,7 +33,7 @@ Thumbs.db
 
 # Agent/AI
 .gemini/
-.agent/
+.agent/*
 .agent/traces/
 .agent/memory/
 # Keep the main .agent configuration, but ignore runtime/temp data if any
