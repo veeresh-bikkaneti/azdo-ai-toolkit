@@ -3,7 +3,7 @@
     "displayName": "AI Initiative Scaffolder",
     "description": "Instantly scaffold the AI Initiative Documentation Suite into your workspace.",
     "version": "1.1.0",
-    "publisher": "veeresh-bikkaneti",
+    "publisher": "RUNTechnologyConsultingServicesLLC",
     "repository": {
         "type": "git",
         "url": "https://github.com/veeresh-bikkaneti/azdo-ai-toolkit"
