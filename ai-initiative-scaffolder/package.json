@@ -3,15 +3,20 @@
     "displayName": "AI Initiative Scaffolder",
     "description": "Instantly scaffold the AI Initiative Documentation Suite into your workspace.",
     "version": "1.1.0",
-    "publisher": "antigravity",
+    "publisher": "veeresh-bikkaneti",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/veeresh-bikkaneti/azdo-ai-toolkit"
+    },
+    "bugs": {
+        "url": "https://github.com/veeresh-bikkaneti/azdo-ai-toolkit/issues"
+    },
+    "homepage": "https://github.com/veeresh-bikkaneti/azdo-ai-toolkit#readme",
     "engines": {
         "vscode": "^1.80.0"
     },
     "categories": [
         "Other"
-    ],
-    "activationEvents": [
-        "onCommand:aiInitiative.scaffold"
     ],
     "main": "./dist/extension.js",
     "contributes": {
