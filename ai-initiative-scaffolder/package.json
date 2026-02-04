@@ -1,0 +1,42 @@
+{
+    "name": "ai-initiative-scaffolder",
+    "displayName": "AI Initiative Scaffolder",
+    "description": "Instantly scaffold the AI Initiative Documentation Suite into your workspace.",
+    "version": "1.1.0",
+    "publisher": "antigravity",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:aiInitiative.scaffold"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "aiInitiative.scaffold",
+                "title": "AI Initiative: Initialize Docs"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run package",
+        "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+        "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+        "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+        "test-compile": "tsc -p ./"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "@types/vscode": "^1.80.0",
+        "@vscode/vsce": "^2.19.0",
+        "esbuild": "^0.27.2",
+        "ts-loader": "^9.5.4",
+        "typescript": "^5.0.0",
+        "webpack": "^5.105.0",
+        "webpack-cli": "^5.1.4"
+    }
+}
