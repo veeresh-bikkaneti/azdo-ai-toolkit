@@ -1,0 +1,64 @@
+{
+  "name": "azdo-pbi-analyzer",
+  "displayName": "Azure DevOps PBI Analyzer",
+  "description": "Analyze Azure DevOps Product Backlog Items and generate test scenarios, Gherkin specs, and Cypress tests with AI assistance.",
+  "version": "1.0.0",
+  "publisher": "RUNTechnologyConsultingServicesLLC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/veeresh-bikkaneti/azdo-ai-toolkit"
+  },
+  "bugs": {
+    "url": "https://github.com/veeresh-bikkaneti/azdo-ai-toolkit/issues"
+  },
+  "homepage": "https://github.com/veeresh-bikkaneti/azdo-ai-toolkit#readme",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "azdoPbiAnalyzer.analyzePbi",
+        "title": "Azure DevOps: Analyze PBI"
+      },
+      {
+        "command": "azdoPbiAnalyzer.openPanel",
+        "title": "Azure DevOps: Open Analyzer Panel"
+      }
+    ],
+    "configuration": {
+      "title": "Azure DevOps PBI Analyzer",
+      "properties": {
+        "azdoPbiAnalyzer.organization": {
+          "type": "string",
+          "default": "",
+          "description": "Default Azure DevOps organization URL (e.g., https://dev.azure.com/yourorg)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "test-compile": "tsc -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.19.0",
+    "esbuild": "^0.27.2",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "azure-devops-node-api": "^12.0.0"
+  }
+}

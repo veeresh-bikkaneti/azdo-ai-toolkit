@@ -1,8 +1,8 @@
-# Azure DevOps PBI Analyzer
+# AI Initiative Scaffolder
 
-> **AI-powered scaffolding for Azure DevOps work item analysis and test automation**
+> **One-click AI documentation deployment for your development projects**
 
-Instantly deploy the complete **AI Initiative Documentation Suite** into your workspace. This VS Code extension provides specialized AI agents, reusable skills, automated workflows, and OWASP-compliant security templates for Azure DevOps projects.
+Instantly deploy the complete **AI Initiative Documentation Suite** into your workspace. This VS Code extension provides specialized AI agents, reusable skills, automated workflows, and architecture templates to supercharge your AI-assisted development workflow.
 
 ---
 
@@ -12,7 +12,7 @@ Instantly deploy the complete **AI Initiative Documentation Suite** into your wo
 
 1. Open VS Code
 2. Press `Ctrl+Shift+X` (Extensions)
-3. Search for **"Azure DevOps PBI Analyzer"**
+3. Search for **"AI Initiative Scaffolder"**
 4. Click **Install**
 
 ### Usage
@@ -37,7 +37,7 @@ Instantly deploy the complete **AI Initiative Documentation Suite** into your wo
 
 | You Say | What Happens |
 |---------|--------------|
-| `@workspace /pbi-to-automation` | Analyzes Azure DevOps PBI and generates Cypress tests |
+| `@workspace /pbi-to-automation` | Runs PBI to automation workflow |
 | `@workspace /brainstorm` | Structured brainstorming session |
 | `@workspace /test` | Generates test cases for your code |
 | `@workspace /orchestrate` | Coordinates multiple AI agents |
