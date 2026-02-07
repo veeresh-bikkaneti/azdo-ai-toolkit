@@ -114,20 +114,7 @@ You can save your Organization URL so you don't have to verify it every time.
 
 ---
 
-## 💻 Developer Guide (Building Locally)
-
-If you want to modify this extension itself:
-
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Compile
-npm run compile
-
-# 3. specific Package for install
-npm run package
-```
+See [DEVELOPER.md](DEVELOPER.md) for detailed instructions on building, running, and contributing to this project.
 
 ---
 
