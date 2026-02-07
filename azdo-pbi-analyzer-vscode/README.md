@@ -1,117 +1,68 @@
-# Azure DevOps PBI Analyzer
+# 🚀 Azure DevOps PBI Analyzer
 
-> **AI-powered PBI analysis with automated test generation**
+> **Your AI-Powered Assistant for Better Requirements & Automated Tests**
 
-Analyze Azure DevOps Product Backlog Items and automatically generate test scenarios, Gherkin specifications, and Cypress tests directly in VS Code.
-
----
-
-## 🚀 Features
-
-- **🔍 PBI Analysis**: Connect to Azure DevOps and analyze PBIs in real-time
-- **🧪 Test Scenario Generation**: Auto-generate comprehensive test scenarios from acceptance criteria
-- **🥒 Gherkin Specs**: Create BDD-style Gherkin feature files
-- **🌲 Cypress Tests**: Generate ready-to-use Cypress test code
-- **🔒 Secure**: PAT securely stored in VS Code (never leaves your machine)
-- **🎨 Beautiful UI**: Modern webview interface with syntax highlighting
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
-## 📦 Installation
+## 👋 What is this?
 
-1. Open VS Code
-2. Press `Ctrl+Shift+X` (Extensions)
-3. Search for **"Azure DevOps PBI Analyzer"**
-4. Click **Install**
+**Writing tests is hard.** Converting abstract requirements into concrete test code is even harder. 
 
----
+The **Azure DevOps PBI Analyzer** solves this by connecting directly to your Azure DevOps board, reading your User Stories (PBIs), and using AI to automatically generate:
+1.  **Missing Acceptance Criteria**: Finds gaps in your requirements.
+2.  **Gherkin Scenarios**: Writes BDD-style "Given/When/Then" specs for you.
+3.  **Cypress Code**: Writes the actual automation code to test those scenarios.
 
-## 🎯 Quick Start
-
-### Step 1: Open Analyzer Panel
-
-Press `Ctrl+Shift+P` and type:
-```
-Azure DevOps: Open Analyzer Panel
-```
-
-Or use the shortcut command:
-```
-Azure DevOps: Analyze PBI
-```
-
-### Step 2: Enter PBI URL
-
-Paste your Azure DevOps PBI URL:
-```
-https://dev.azure.com/yourorg/yourproject/_workitems/edit/12345
-```
-
-### Step 3: Enter PAT
-
-Enter your Personal Access Token (PAT).
-
-> **Security Note**: Your PAT is stored securely in VS Code's SecretStorage and never leaves your local machine.
-
-### Step 4: Analyze
-
-Click **"Analyze PBI"** and wait for the magic! ✨
+It's like having a Senior QA Engineer paired with you, instantly writing the boilerplate code so you can focus on the logic.
 
 ---
 
-## 📋 What You Get
+## 🏁 Quick Start Guide
 
-### PBI Details
-- Work item title, description, and acceptance criteria
-- Linked items and relationships
+Follow these steps to generate your first test suite in under 2 minutes.
 
-### Test Scenarios
-- Auto-generated test cases for each acceptance criterion
-- Step-by-step test instructions
-- Expected results
+### Step 1: Open the Analyzer
+1.  Open VS Code.
+2.  Press `Ctrl+Shift+P` (Command Palette).
+3.  Type **"Azure DevOps: Open Analyzer Panel"** and press Enter.
 
-### Gherkin Specifications
-- Complete Feature files with Scenarios
-- Given-When-Then format
-- Copy-paste ready
+### Step 2: Connect to Azure DevOps
+*Note: You only need to do this once.*
 
-### Cypress Tests
-- Fully functional Cypress test code
-- Modern best practices (data-testid selectors)
-- Ready to add to your test suite
+1.  Go to your Azure DevOps **User Settings** (top right icon) -> **Personal Access Tokens**.
+2.  Click **New Token**.
+    - **Name**: `VSCode Analyzer`
+    - **Scopes**: Scroll down to **Work Items** and select **Read**.
+3.  Click **Create** and copy the long string of characters.
+4.  Paste this token into the **"Personal Access Token (PAT)"** field in the extension panel.
 
----
+> 🔒 **Security First**: Your token is stored in VS Code's secure Secret Storage. It never leaves your machine.
 
-## 🔐 Setting Up Azure DevOps PAT
-
-1. Go to https://dev.azure.com/[your-org]/_usersSettings/tokens
-2. Click **"New Token"**
-3. Name: `vscode-pbi-analyzer`
-4. Scopes: **Work Items → Read**
-5. Click **Create**
-6. **Copy the token** (you won't see it again!)
-7. Paste it into the extension when prompted
+### Step 3: Analyze a PBI
+1.  Copy the URL of a specific PBI or Bug from your board.
+    - *Example*: `https://dev.azure.com/myorg/myproject/_workitems/edit/54321`
+2.  Paste it into the **"PBI URL or ID"** field.
+3.  Click **Analyze PBI**.
 
 ---
 
-## 🛠️ Configuration
+## 🧠 Capabilities Walkthrough
 
-You can set a default organization in VS Code settings:
+Once you click "Analyze", the tool generates three tabs of results:
 
-```json
-{
-  "azdoPbiAnalyzer.organization": "https://dev.azure.com/yourorg"
-}
-```
+### Tab 1: 📋 Analysis & Gaps
+This section reviews the quality of your requirement itself.
+- **Summary**: A quick digest of what the PBI is asking for.
+- **Gap Analysis**: AI checks if you missed edge cases (e.g., "What happens if the user has no permissions?", "What if the API times out?").
 
----
+### Tab 2: 🥒 Gherkin Specifications
+This tab generates human-readable behavior specs.
+- **Format**: Standard Gherkin (`.feature` file format).
+- **Usage**: Copy this content into a new file in your project, e.g., `specs/login.feature`.
 
-## 🧪 Example Output
-
-### Input
-PBI: "As a user, I want to log in with my credentials"
-
-### Generated Gherkin
+**Example Output**:
 ```gherkin
 Feature: User Login
 
@@ -122,72 +73,62 @@ Scenario: Successful login with valid credentials
   Then the user should be redirected to the dashboard
 ```
 
-### Generated Cypress
-```javascript
+### Tab 3: 🌲 Cypress Test Code
+This tab generates the actual TypeScript code for Cypress.
+- **Best Practices**: Uses `data-testid` selectors for stability.
+- **Structure**: Follows `describe` / `it` block patterns.
+- **Usage**: Copy this into your Cypress `e2e` folder, e.g., `cypress/e2e/login_spec.ts`.
+
+**Example Output**:
+```typescript
 describe('User Login', () => {
-  it('should login successfully with valid credentials', () => {
-    cy.visit('/login');
-    cy.get('[data-testid="username"]').type('validuser');
-    cy.get('[data-testid="password"]').type('validpass');
-    cy.get('[data-testid="login-button"]').click();
-    cy.url().should('include', '/dashboard');
-  });
+    it('should login successfully', () => {
+        cy.visit('/login');
+        cy.get('[data-testid="username"]').type('testuser');
+        // ...
+    });
 });
 ```
 
 ---
 
-## 🔒 Security & Privacy
+## ⚙️ Configuration
 
-> [!IMPORTANT]
-> **All data processing happens locally in VS Code.**
+You can save your Organization URL so you don't have to verify it every time.
 
-- ✅ **Secure PAT Storage**: Uses VS Code SecretStorage API
-- ✅ **No Cloud Processing**: All analysis runs locally
-- ✅ **HTTPS Only**: All Azure DevOps API calls use HTTPS
-- ✅ **No Telemetry**: Zero data collection
+1.  Open VS Code Settings (`Ctrl+,`).
+2.  Search for `azdo`.
+3.  Set **Azdo Pbi Analyzer: Organization** to your base URL (e.g., `https://dev.azure.com/mycompany`).
 
 ---
 
-## 🐛 Troubleshooting
+## 🐞 Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| "Invalid PAT" | Verify PAT has Work Items → Read permission |
-| "PBI not found" | Check PBI URL format and verify access |
-| Panel not opening | Reload VS Code window (`Ctrl+Shift+P` → "Reload Window") |
-| Analysis taking long | Large PBIs with many linked items may take longer |
+**"Invalid PAT" Error**
+- Ensure your token didn't expire.
+- Verify you selected "Work Items > Read" scope when creating it.
 
----
-
-## 📚 Related Extensions
-
-- **AI Initiative Scaffolder** - Documentation and agent scaffolding
-- **GitHub Copilot** - AI-assisted coding
-- **Azure DevOps** - Official Azure DevOps extension
+**"PBI not found"**
+- Ensure you copied the *full* URL, including the ID.
+- Check if you have permissions to view that specific project.
 
 ---
 
-## 🤝 Contributing
+## 💻 Developer Guide (Building Locally)
 
-Found a bug or have a feature request? Open an issue on [GitHub](https://github.com/veeresh-bikkaneti/azdo-ai-toolkit/issues)!
+If you want to modify this extension itself:
 
----
+```bash
+# 1. Install dependencies
+npm install
 
-## 📜 License
+# 2. Compile
+npm run compile
 
-MIT © RUN Technology Consulting Services LLC
-
----
-
-## 🔗 Links
-
-- **Repository**: https://github.com/veeresh-bikkaneti/azdo-ai-toolkit
-- **Issues**: https://github.com/veeresh-bikkaneti/azdo-ai-toolkit/issues
-- **Changelog**: [CHANGELOG.md](./CHANGELOG.md)
+# 3. specific Package for install
+npm run package
+```
 
 ---
 
-## ⭐ Enjoy!
-
-If this extension helps you, consider giving it a ⭐ on the marketplace!
+**Happy Testing!** 🚀
