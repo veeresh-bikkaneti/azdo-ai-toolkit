@@ -26,7 +26,7 @@ Follow these steps to generate your first test suite in under 2 minutes.
 ### Step 1: Open the Analyzer
 1.  Open VS Code.
 2.  Press `Ctrl+Shift+P` (Command Palette).
-3.  Type **"Azure DevOps: Open Analyzer Panel"** and press Enter.
+3.  Type **"QA the PBI"** and press Enter.
 
 ### Step 2: Connect to Azure DevOps
 *Note: You only need to do this once.*
@@ -111,6 +111,37 @@ You can save your Organization URL so you don't have to verify it every time.
 **"PBI not found"**
 - Ensure you copied the *full* URL, including the ID.
 - Check if you have permissions to view that specific project.
+
+---
+
+## 🆘 Troubleshooting & Alternative Path
+
+If the extension is unavailable or you need a quick alternative, you can use **ANY** AI tool (ChatGPT, Claude, Gemini) to manually generate the same results.
+
+### Manual Workaround: Copy-Paste Prompt
+
+1.  Copy the **System Prompt** below.
+2.  Paste it into your AI chat window.
+3.  Paste your PBI content (Title, Description, Acceptance Criteria) right after it.
+
+<details>
+<summary>📋 <strong>Click to Expand System Prompt</strong></summary>
+
+```markdown
+You are an expert QA Automation Engineer and Product Owner.
+Your goal is to analyze the following Product Backlog Item (PBI) and generate detailed Quality Assurance artifacts.
+
+Input:
+[PASTE YOUR PBI CONTENT HERE]
+
+Output Required:
+1.  **Gap Analysis**: Identify missing acceptance criteria or edge cases.
+2.  **Gherkin Scenarios**: Write BDD scenarios (Given/When/Then) covering positive, negative, and edge cases.
+3.  **Cypress Code**: meaningful, robust Cypress tests using `data-testid` selectors.
+4.  **Manual Test Cases (CSV format)**: Create a CSV-compatible list for Azure DevOps import with columns: ID, Work Item Type, Title, Test Step, Step Action, Step Expected.
+```
+
+</details>
 
 ---
 

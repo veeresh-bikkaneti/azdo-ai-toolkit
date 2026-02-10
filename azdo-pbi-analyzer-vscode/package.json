@@ -2,7 +2,7 @@
   "name": "azdo-pbi-analyzer",
   "displayName": "Azure DevOps PBI Analyzer",
   "description": "Analyze Azure DevOps Product Backlog Items and generate test scenarios, Gherkin specs, and Cypress tests with AI assistance.",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "publisher": "RUNTechnologyConsultingServicesLLC",
   "repository": {
     "type": "git",
@@ -25,7 +25,7 @@
     "commands": [
       {
         "command": "azdoPbiAnalyzer.analyzePbi",
-        "title": "Azure DevOps: Analyze PBI"
+        "title": "QA the PBI"
       },
       {
         "command": "azdoPbiAnalyzer.openPanel",
@@ -44,17 +44,26 @@
     }
   },
   "scripts": {
+    "release": "npm version patch && vsce package",
     "vscode:prepublish": "npm run package",
     "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
     "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "test": "npm run test-compile && node ./out/test/runTest.js",
+    "test:unit": "mocha -r ts-node/register --ui tdd src/test/suite/generators.test.ts",
     "test-compile": "tsc -p ./"
   },
   "devDependencies": {
+    "@types/glob": "^7.2.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.80.0",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^2.19.0",
     "esbuild": "^0.27.2",
+    "glob": "^7.2.3",
+    "mocha": "^11.7.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
   },
   "dependencies": {

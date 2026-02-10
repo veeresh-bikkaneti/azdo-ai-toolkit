@@ -1,4 +1,5 @@
 .vscode/**
+.github/**
 .vscode-test/**
 src/**
 out/**
@@ -8,4 +9,16 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 tsconfig.json
+
+# AI/Agent Artifacts
+.agent/**
+Agent_*.md
+GEMINI.md
+ARCHITECTURE.md
+OWASP_AI_SECURITY.md
+Workflow_*.md
+Project_README.md
+COPILOT_INSTRUCTIONS.md
+
+# Build Artifacts
 node_modules/**

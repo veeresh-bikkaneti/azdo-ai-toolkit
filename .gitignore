@@ -8,6 +8,7 @@ out/
 build/
 bin/
 obj/
+.vscode-test/
 
 # IDEs
 .vscode/
