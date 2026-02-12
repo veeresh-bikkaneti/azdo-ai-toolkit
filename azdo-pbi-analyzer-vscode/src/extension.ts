@@ -1,8 +1,14 @@
 import * as vscode from 'vscode';
 import { AnalyzerPanel } from './webview/AnalyzerPanel';
 import { AnalyzePbiCommand } from './commands/AnalyzePbiCommand';
+import { InstallAgentsCommand } from './commands/InstallAgentsCommand';
+import { PbiChatParticipant } from './chat/PbiChatParticipant';
 
 export function activate(context: vscode.ExtensionContext) {
+
+    // Initialize Copilot Chat Participant
+    const chatParticipant = new PbiChatParticipant(context);
+    chatParticipant.initialize();
 
     // Register command to analyze PBI
     const analyzePbiCommand = vscode.commands.registerCommand(
@@ -20,7 +26,17 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(analyzePbiCommand, openPanelCommand);
+    // Register command to install AI agents
+    const installAgentsCmd = new InstallAgentsCommand(context);
+    const installAgentsCommand = vscode.commands.registerCommand(
+        'azdoPbiAnalyzer.installAgents',
+        async () => {
+            await installAgentsCmd.execute();
+        }
+    );
+
+    context.subscriptions.push(analyzePbiCommand, openPanelCommand, installAgentsCommand);
 }
 
 export function deactivate() { }
+

@@ -135,4 +135,171 @@ export class DevOpsClient {
         }
         return null;
     }
+
+    /**
+     * Recursively fetches a work item with its full hierarchy.
+     * @param id Work item ID
+     * @param maxDepth Maximum recursion depth (default: 3)
+     * @param visited Set of visited IDs to prevent infinite loops
+     * @returns Hierarchical work item structure
+     */
+    public async getWorkItemRecursively(
+        id: number,
+        maxDepth: number = 3,
+        visited: Set<number> = new Set()
+    ): Promise<WorkItemTree | null> {
+        if (maxDepth <= 0 || visited.has(id)) {
+            return null;
+        }
+
+        visited.add(id);
+
+        try {
+            const workItem = await this.getWorkItem(id);
+            if (!workItem) {
+                return null;
+            }
+
+            const tree: WorkItemTree = {
+                workItem,
+                parent: null,
+                children: [],
+                related: [],
+            };
+
+            const relations = workItem.relations || [];
+
+            // Fetch parent recursively
+            const parentRel = relations.find(
+                (r) => r.attributes?.name === 'Parent' || r.rel === 'System.LinkTypes.Hierarchy-Reverse'
+            );
+            if (parentRel && parentRel.url) {
+                const parentId = this.extractIdFromUrl(parentRel.url);
+                if (parentId && !visited.has(parentId)) {
+                    tree.parent = await this.getWorkItemRecursively(parentId, maxDepth - 1, visited);
+                }
+            }
+
+            // Fetch children recursively
+            const childRels = relations.filter(
+                (r) => r.attributes?.name === 'Child' || r.rel === 'System.LinkTypes.Hierarchy-Forward'
+            );
+            for (const childRel of childRels.slice(0, 10)) {
+                // Limit to 10 children
+                if (childRel.url) {
+                    const childId = this.extractIdFromUrl(childRel.url);
+                    if (childId && !visited.has(childId)) {
+                        const childTree = await this.getWorkItemRecursively(childId, maxDepth - 1, visited);
+                        if (childTree) {
+                            tree.children.push(childTree);
+                        }
+                    }
+                }
+            }
+
+            // Fetch related items (non-hierarchical)
+            const relatedRels = relations.filter(
+                (r) =>
+                    r.rel !== 'System.LinkTypes.Hierarchy-Reverse' &&
+                    r.rel !== 'System.LinkTypes.Hierarchy-Forward' &&
+                    r.url
+            );
+            for (const relatedRel of relatedRels.slice(0, 5)) {
+                // Limit to 5 related
+                if (relatedRel.url) {
+                    const relatedId = this.extractIdFromUrl(relatedRel.url);
+                    if (relatedId && !visited.has(relatedId)) {
+                        const relatedItem = await this.getWorkItem(relatedId);
+                        if (relatedItem) {
+                            tree.related.push({
+                                workItem: relatedItem,
+                                parent: null,
+                                children: [],
+                                related: [],
+                            });
+                        }
+                    }
+                }
+            }
+
+            return tree;
+        } catch (e) {
+            console.error(`Error recursively fetching work item ${id}:`, e);
+            return null;
+        }
+    }
+
+    /**
+     * Builds a flattened summary of the work item tree for analysis.
+     */
+    public buildWorkItemSummary(tree: WorkItemTree | null): WorkItemHierarchy {
+        if (!tree) {
+            return {
+                parentChain: [],
+                children: [],
+                dependencies: [],
+            };
+        }
+
+        const summary: WorkItemHierarchy = {
+            parentChain: [],
+            children: [],
+            dependencies: [],
+        };
+
+        // Build parent chain (from root to current)
+        let current: WorkItemTree | null = tree.parent;
+        const parents: WorkItemSummary[] = [];
+        while (current) {
+            parents.unshift(this.toWorkItemSummary(current.workItem));
+            current = current.parent;
+        }
+        summary.parentChain = parents;
+
+        // Flatten children
+        const flattenChildren = (node: WorkItemTree): WorkItemSummary[] => {
+            const items: WorkItemSummary[] = [];
+            for (const child of node.children) {
+                items.push(this.toWorkItemSummary(child.workItem));
+                items.push(...flattenChildren(child));
+            }
+            return items;
+        };
+        summary.children = flattenChildren(tree);
+
+        // Add related items
+        summary.dependencies = tree.related.map((r) => this.toWorkItemSummary(r.workItem));
+
+        return summary;
+    }
+
+    private toWorkItemSummary(workItem: workItemTrackingInterfaces.WorkItem): WorkItemSummary {
+        const fields = workItem.fields || {};
+        return {
+            id: workItem.id || 0,
+            title: fields['System.Title'] || '',
+            type: fields['System.WorkItemType'] || '',
+            state: fields['System.State'] || '',
+        };
+    }
+}
+
+export interface WorkItemTree {
+    workItem: workItemTrackingInterfaces.WorkItem;
+    parent: WorkItemTree | null;
+    children: WorkItemTree[];
+    related: WorkItemTree[];
+}
+
+export interface WorkItemSummary {
+    id: number;
+    title: string;
+    type: string;
+    state: string;
+}
+
+export interface WorkItemHierarchy {
+    parentChain: WorkItemSummary[];
+    children: WorkItemSummary[];
+    dependencies: WorkItemSummary[];
 }

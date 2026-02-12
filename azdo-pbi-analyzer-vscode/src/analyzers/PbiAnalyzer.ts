@@ -18,6 +18,10 @@ export interface PbiContext {
     parentTitle?: string;
     parentDescription?: string;
     relatedItems?: Array<{ id: number; title: string; type: string; state: string }>;
+    // Enhanced hierarchy support
+    parentChain?: Array<{ id: number; title: string; type: string; state: string }>;
+    children?: Array<{ id: number; title: string; type: string; state: string }>;
+    dependencies?: Array<{ id: number; title: string; type: string; state: string }>;
 }
 
 export interface AnalysisResult {
@@ -233,40 +237,89 @@ export class PbiAnalyzer {
     private generateQuestions(pbi: PbiContext): string[] {
         const questions: string[] = [];
 
+        // Completeness checks
         if (!pbi.description || pbi.description.trim().length < 20) {
-            questions.push('The description is missing or very brief. What is the detailed requirement?');
+            questions.push('📝 The description is missing or very brief. What is the detailed requirement?');
         }
 
         if (pbi.acceptanceCriteria.length === 0) {
-            questions.push('No acceptance criteria defined. What are the conditions of satisfaction?');
+            questions.push('✅ No acceptance criteria defined. What are the conditions of satisfaction?');
         }
 
-        if (pbi.acceptanceCriteria.length < 3) {
-            questions.push('Only a few acceptance criteria are listed. Are there additional edge cases or scenarios to cover?');
+        if (pbi.acceptanceCriteria.length < 3 && pbi.acceptanceCriteria.length > 0) {
+            questions.push('🔍 Only a few acceptance criteria are listed. Are there additional edge cases or scenarios to cover?');
         }
 
-        // Check for vague criteria
-        const vaguePatterns = ['should work', 'properly', 'correctly', 'as expected', 'appropriate'];
+        // Vague language detection (ambiguity)
+        const vaguePatterns = ['should work', 'properly', 'correctly', 'as expected', 'appropriate', 'fast', 'slow', 'secure', 'safe', 'easy', 'simple', 'good'];
+        const foundVague = new Set<string>();
         pbi.acceptanceCriteria.forEach((ac, i) => {
             const lower = ac.toLowerCase();
             for (const pattern of vaguePatterns) {
-                if (lower.includes(pattern)) {
-                    questions.push(`AC ${i + 1} uses vague language ("${pattern}"). Can you define specific measurable outcomes?`);
+                if (lower.includes(pattern) && !foundVague.has(pattern)) {
+                    questions.push(`⚠️ AC ${i + 1} uses vague language ("${pattern}"). Can you define specific measurable outcomes?`);
+                    foundVague.add(pattern);
                     break;
                 }
             }
         });
 
-        // Check for missing non-functional concerns
-        const nfrKeywords = ['performance', 'security', 'accessibility', 'error', 'validation', 'logging'];
-        const allText = (pbi.description + ' ' + pbi.acceptanceCriteria.join(' ')).toLowerCase();
-        const missingNfr = nfrKeywords.filter((k) => !allText.includes(k));
-        if (missingNfr.length > 0) {
-            questions.push(`No mention of: ${missingNfr.join(', ')}. Are there non-functional requirements to consider?`);
+        // Contradiction analysis
+        const descriptionLower = pbi.description.toLowerCase();
+        const acText = pbi.acceptanceCriteria.join(' ').toLowerCase();
+        if (descriptionLower.includes('read-only') && acText.includes('edit')) {
+            questions.push('⚡ Potential contradiction: Description mentions "read-only" but AC includes "edit" functionality.');
+        }
+        if (descriptionLower.includes('simple') && pbi.acceptanceCriteria.length > 5) {
+            questions.push('⚡ Potential complexity mismatch: Description says "simple" but there are many acceptance criteria.');
         }
 
-        if (!pbi.parentTitle) {
-            questions.push('No parent epic/feature linked. What is the broader goal this PBI contributes to?');
+        // NFR Detection (Non-Functional Requirements)
+        const nfrChecks = [
+            { keyword: 'performance', question: '⚡ No performance requirements mentioned. Are there response time or throughput targets?' },
+            { keyword: 'security', question: '🔒 No security requirements mentioned. Are there authentication, authorization, or data protection needs?' },
+            { keyword: 'accessibility', question: '♿ No accessibility requirements mentioned. Should this be WCAG 2.1 AA compliant?' },
+            { keyword: 'error', question: '🚨 No error handling mentioned. How should the system handle failures or invalid input?' },
+            { keyword: 'validation', question: '✔️ No validation mentioned. What input validation is required?' },
+            { keyword: 'logging', question: '📊 No logging/monitoring mentioned. What should be logged for debugging and auditing?' },
+        ];
+
+        const allText = (pbi.description + ' ' + pbi.acceptanceCriteria.join(' ')).toLowerCase();
+        nfrChecks.forEach((check) => {
+            if (!allText.includes(check.keyword)) {
+                questions.push(check.question);
+            }
+        });
+
+        // Edge case detection
+        if (!acText.includes('empty') && !acText.includes('null') && !acText.includes('invalid')) {
+            questions.push('🧪 No edge cases mentioned (empty, null, invalid data). What are the boundary conditions?');
+        }
+
+        // Integration gaps
+        if (acText.includes('api') || acText.includes('service') || acText.includes('integration')) {
+            if (!acText.includes('timeout') && !acText.includes('retry') && !acText.includes('fallback')) {
+                questions.push('🔗 Integration mentioned but no timeout, retry, or fallback strategy defined.');
+            }
+        }
+
+        // Hierarchy context
+        if (!pbi.parentTitle && !pbi.parentChain) {
+            questions.push('🏗️ No parent epic/feature linked. What is the broader goal this PBI contributes to?');
+        }
+
+        if (pbi.children && pbi.children.length > 0) {
+            const incompleteTasks = pbi.children.filter((c) => c.state !== 'Closed' && c.state !== 'Done');
+            if (incompleteTasks.length > 0) {
+                questions.push(`📋 ${incompleteTasks.length} child task(s) are not complete. Should they be done before this PBI?`);
+            }
+        }
+
+        // Data validation
+        if (acText.includes('form') || acText.includes('input') || acText.includes('field')) {
+            if (!acText.includes('required') && !acText.includes('optional')) {
+                questions.push('📝 Form/input mentioned but required vs. optional fields not specified.');
+            }
         }
 
         return questions;

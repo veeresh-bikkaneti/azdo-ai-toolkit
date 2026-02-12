@@ -1,8 +1,8 @@
 {
   "name": "azdo-pbi-analyzer",
   "displayName": "Azure DevOps PBI Analyzer",
-  "description": "Analyze Azure DevOps Product Backlog Items and generate test scenarios, Gherkin specs, and Cypress tests with AI assistance.",
-  "version": "1.0.2",
+  "description": "Analyze Azure DevOps PBIs to generate Gherkin specs, Cypress & Playwright tests, and Manual Test Cases.",
+  "version": "1.0.3",
   "publisher": "RUNTechnologyConsultingServicesLLC",
   "repository": {
     "type": "git",
@@ -30,6 +30,44 @@
       {
         "command": "azdoPbiAnalyzer.openPanel",
         "title": "Azure DevOps: Open Analyzer Panel"
+      },
+      {
+        "command": "azdoPbiAnalyzer.installAgents",
+        "title": "Azure DevOps: Install AI Agents and Workflows"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "azdo.pbi-analyst",
+        "name": "AzDO PBI Analyst",
+        "description": "Analyze Product Backlog Items with multiple QA personas",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "analyze",
+            "description": "Full multi-persona PBI analysis"
+          },
+          {
+            "name": "critical-review",
+            "description": "Critical thinking analysis of requirements"
+          },
+          {
+            "name": "qa-engineer",
+            "description": "Test case design and coverage analysis"
+          },
+          {
+            "name": "qa-architect",
+            "description": "Testing strategy and framework recommendations"
+          },
+          {
+            "name": "manual-test",
+            "description": "Exploratory testing and UX focus"
+          },
+          {
+            "name": "automation",
+            "description": "Test automation strategy and implementation"
+          }
+        ]
       }
     ],
     "configuration": {

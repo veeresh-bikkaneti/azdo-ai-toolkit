@@ -1,152 +1,270 @@
-# 🚀 Azure DevOps PBI Analyzer
+# Azure DevOps PBI Analyzer
 
-> **Your AI-Powered Assistant for Better Requirements & Automated Tests**
+Analyze Azure DevOps Product Backlog Items (PBIs) to generate test scenarios, Gherkin specifications, Cypress/Playwright tests, and comprehensive gap analysis using AI-powered agent orchestration.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+## ✨ Features
 
----
-
-## 👋 What is this?
-
-**Writing tests is hard.** Converting abstract requirements into concrete test code is even harder. 
-
-The **Azure DevOps PBI Analyzer** solves this by connecting directly to your Azure DevOps board, reading your User Stories (PBIs), and using AI to automatically generate:
-1.  **Missing Acceptance Criteria**: Finds gaps in your requirements.
-2.  **Gherkin Scenarios**: Writes BDD-style "Given/When/Then" specs for you.
-3.  **Cypress Code**: Writes the actual automation code to test those scenarios.
-
-It's like having a Senior QA Engineer paired with you, instantly writing the boilerplate code so you can focus on the logic.
+- 🔄 **Deep Analysis**: Recursively fetch work items with full hierarchy (parents, children, dependencies)
+- 🧠 **AI-Driven Gap Analysis**: Detect missing NFRs, contradictions, edge cases, and integration gaps
+- 🎭 **Multi-Persona QA Analysis**: Copilot Chat with 6 QA personas
+- 🤖 **27 AI Agents**: Install expert agents for testing, architecture, debugging, and more
+- 📝 **Auto-Generated Tests**: Gherkin, Cypress, Playwright, and Manual test cases
 
 ---
 
-## 🏁 Quick Start Guide
+## 🚀 Quick Start
 
-Follow these steps to generate your first test suite in under 2 minutes.
+### Option 1: Use the VS Code Extension
 
-### Step 1: Open the Analyzer
-1.  Open VS Code.
-2.  Press `Ctrl+Shift+P` (Command Palette).
-3.  Type **"QA the PBI"** and press Enter.
+1. **Install Extension** from VS Code Marketplace
+2. **Analyze a PBI**:
+   - Press `Ctrl+Shift+P`
+   - Run: `QA the PBI`
+   - Enter PBI URL: `https://dev.azure.com/org/project/_workitems/edit/12345`
+3. **View Analysis** with deep hierarchy and AI-generated questions
 
-### Step 2: Connect to Azure DevOps
-*Note: You only need to do this once.*
+### Option 2: Use AI Agents Directly (No Extension Needed!)
 
-1.  Go to your Azure DevOps **User Settings** (top right icon) -> **Personal Access Tokens**.
-2.  Click **New Token**.
-    - **Name**: `VSCode Analyzer`
-    - **Scopes**: Scroll down to **Work Items** and select **Read**.
-3.  Click **Create** and copy the long string of characters.
-4.  Paste this token into the **"Personal Access Token (PAT)"** field in the extension panel.
+**Works with ANY AI model (ChatGPT Free, Claude, Gemini, etc.)**
 
-> 🔒 **Security First**: Your token is stored in VS Code's secure Secret Storage. It never leaves your machine.
+1. **Install Agents**:
+   - Press `Ctrl+Shift+P`
+   - Run: `Azure DevOps: Install AI Agents and Workflows`
+   - **OR** manually copy `.agent` folder to workspace
 
-### Step 3: Analyze a PBI
-1.  Copy the URL of a specific PBI or Bug from your board.
-    - *Example*: `https://dev.azure.com/myorg/myproject/_workitems/edit/54321`
-2.  Paste it into the **"PBI URL or ID"** field.
-3.  Click **Analyze PBI**.
+2. **Use with GitHub Copilot** (Free or Paid):
+   ```
+   #file:.agent/agents/qa-engineer.md
+   
+   Create test cases for: [Your PBI]
+   ```
+
+3. **OR Copy-Paste to Any AI**:
+   - Open `.agent/agents/qa-engineer.md`
+   - Copy entire content
+   - Paste into ChatGPT/Claude/Gemini
+   - Add your question below
+
+📖 **Full Guide**: See [`.agent/HOW_TO_USE.md`](.agent/HOW_TO_USE.md) for detailed instructions
 
 ---
 
-## 🧠 Capabilities Walkthrough
+## 🎭 Copilot Chat Commands
 
-Once you click "Analyze", the tool generates three tabs of results:
+**Chat Participant**: `@azdo.pbi-analyst`
 
-### Tab 1: 📋 Analysis & Gaps
-This section reviews the quality of your requirement itself.
-- **Summary**: A quick digest of what the PBI is asking for.
-- **Gap Analysis**: AI checks if you missed edge cases (e.g., "What happens if the user has no permissions?", "What if the API times out?").
+| Command | Description |
+|---------|-------------|
+| `/analyze` | Full multi-persona orchestration (all QA personas) |
+| `/critical-review` | Critical thinking analysis (assumptions, gaps, risks) |
+| `/qa-engineer` | Test case design and coverage analysis |
+| `/qa-architect` | Testing strategy and framework recommendations |
+| `/manual-test` | Exploratory testing and UX focus |
+| `/automation` | Test automation strategy and implementation |
 
-### Tab 2: 🥒 Gherkin Specifications
-This tab generates human-readable behavior specs.
-- **Format**: Standard Gherkin (`.feature` file format).
-- **Usage**: Copy this content into a new file in your project, e.g., `specs/login.feature`.
-
-**Example Output**:
-```gherkin
-Feature: User Login
-
-Scenario: Successful login with valid credentials
-  Given the user is on the login page
-  When the user enters valid credentials
-  And clicks the login button
-  Then the user should be redirected to the dashboard
+**Example**:
 ```
+@azdo /analyze
 
-### Tab 3: 🌲 Cypress Test Code
-This tab generates the actual TypeScript code for Cypress.
-- **Best Practices**: Uses `data-testid` selectors for stability.
-- **Structure**: Follows `describe` / `it` block patterns.
-- **Usage**: Copy this into your Cypress `e2e` folder, e.g., `cypress/e2e/login_spec.ts`.
-
-**Example Output**:
-```typescript
-describe('User Login', () => {
-    it('should login successfully', () => {
-        cy.visit('/login');
-        cy.get('[data-testid="username"]').type('testuser');
-        // ...
-    });
-});
+[Your PBI details]
 ```
 
 ---
 
-## ⚙️ Configuration
+## 🤖 Available AI Agents (27 Total)
 
-You can save your Organization URL so you don't have to verify it every time.
+**QA Specialists**:
+- 🧠 Critical Thinker - Requirements analysis, assumption identification
+- 🎭 QA Orchestrator - Coordinates personas, synthesizes insights
+- 🧪 QA Engineer - Test case design, functional testing
+- 🏗️ QA Architect - Testing strategy, framework selection
+- 🔍 Manual Tester - Exploratory testing, UX validation
+- ⚙️ Automation Engineer - Test automation, CI/CD integration
 
-1.  Open VS Code Settings (`Ctrl+,`).
-2.  Search for `azdo`.
-3.  Set **Azdo Pbi Analyzer: Organization** to your base URL (e.g., `https://dev.azure.com/mycompany`).
+**Development Specialists**:
+- 🎨 Frontend Specialist - UI/UX, React, TypeScript
+- 🔧 Backend Specialist - APIs, databases, architecture
+- 📱 Mobile Developer - iOS, Android, React Native
+- 🛡️ Security Auditor - Vulnerability scanning, compliance
+- 🐛 Debugger - Root cause analysis, troubleshooting
+- 📊 Database Architect - Schema design, optimization
+
+**... and 15 more!** See `.agent/agents/` folder.
 
 ---
 
-## 🐞 Troubleshooting
+## 🛠️ Alternative Usage (No Extension Required)
 
-**"Invalid PAT" Error**
-- Ensure your token didn't expire.
-- Verify you selected "Work Items > Read" scope when creating it.
+### For VS Code Users (GitHub Copilot)
 
-**"PBI not found"**
-- Ensure you copied the *full* URL, including the ID.
-- Check if you have permissions to view that specific project.
+**In Copilot Chat**:
+```
+#file:.agent/agents/critical-thinker.md
 
----
-
-## 🆘 Troubleshooting & Alternative Path
-
-If the extension is unavailable or you need a quick alternative, you can use **ANY** AI tool (ChatGPT, Claude, Gemini) to manually generate the same results.
-
-### Manual Workaround: Copy-Paste Prompt
-
-1.  Copy the **System Prompt** below.
-2.  Paste it into your AI chat window.
-3.  Paste your PBI content (Title, Description, Acceptance Criteria) right after it.
-
-<details>
-<summary>📋 <strong>Click to Expand System Prompt</strong></summary>
-
-```markdown
-You are an expert QA Automation Engineer and Product Owner.
-Your goal is to analyze the following Product Backlog Item (PBI) and generate detailed Quality Assurance artifacts.
-
-Input:
-[PASTE YOUR PBI CONTENT HERE]
-
-Output Required:
-1.  **Gap Analysis**: Identify missing acceptance criteria or edge cases.
-2.  **Gherkin Scenarios**: Write BDD scenarios (Given/When/Then) covering positive, negative, and edge cases.
-3.  **Cypress Code**: meaningful, robust Cypress tests using `data-testid` selectors.
-4.  **Manual Test Cases (CSV format)**: Create a CSV-compatible list for Azure DevOps import with columns: ID, Work Item Type, Title, Test Step, Step Action, Step Expected.
+Analyze this PBI:
+"Users can reset password securely"
 ```
 
-</details>
+### For ChatGPT / Claude / Gemini Users
+
+1. Open `.agent/agents/critical-thinker.md`
+2. Copy all content
+3. Paste into AI chat
+4. Add your question
+
+**No VS Code needed! No installation needed! Works with FREE AI models!**
 
 ---
 
-See [DEVELOPER.md](DEVELOPER.md) for detailed instructions on building, running, and contributing to this project.
+## 📋 What Gets Analyzed?
+
+**Deep Work Item Hierarchy**:
+- ✅ Parent chain (Epic → Feature → Grandparent)
+- ✅ Children (Tasks, Bugs, Sub-tasks)
+- ✅ Dependencies (Related items)
+
+**Enhanced Gap Analysis**:
+- 🔒 Security requirements missing?
+- ⚡ Performance targets undefined?
+- ♿ Accessibility not mentioned?
+- 🚨 Error handling gaps?
+- ✔️ Validation missing?
+- 📊 Logging/monitoring absent?
+- 🧪 Edge cases not covered?
+- 🔗 Integration timeout/retry strategy?
+
+**Auto-Generated Artifacts**:
+- Test scenarios (Positive, Negative, Edge cases)
+- Gherkin specifications
+- Cypress test pseudocode
+- Playwright test pseudocode
+- Manual test cases (step-by-step)
 
 ---
 
-**Happy Testing!** 🚀
+## 📖 Documentation
+
+- 📘 [Beginner's Guide to AI Agents](.agent/HOW_TO_USE.md) - **START HERE!**
+- 🏗️ [Agent Architecture](.agent/ARCHITECTURE.md)
+- 🔄 [Workflows](.agent/workflows/)
+- 🎭 [All Agents](.agent/agents/)
+
+---
+
+## 💡 Examples
+
+### Example 1: GitHub Copilot Chat
+
+```
+@azdo /analyze
+
+PBI: "Implement OAuth2 login for mobile app"
+
+Acceptance Criteria:
+- Users can log in with Google and Facebook
+- Session persists for 30 days
+- Token refresh happens automatically
+```
+
+**AI orchestrates**:
+- Critical Thinker → Identifies PKCE compliance gap
+- QA Engineer → Creates 12 test scenarios
+- QA Architect → Recommends Playwright + Detox
+- Automation Engineer → 80% automation target
+
+---
+
+### Example 2: Using Agents with ChatGPT Free
+
+**Step 1**: Copy `.agent/agents/qa-engineer.md` content
+
+**Step 2**: Paste into ChatGPT:
+```
+[Pasted QA Engineer agent prompt]
+
+Create test cases for:
+Feature: Shopping cart checkout
+- User adds items
+- Applies discount code
+- Completes payment
+```
+
+**Step 3**: Get expert test cases with Given/When/Then format!
+
+---
+
+## 🆓 Works with Free AI Models - No Quality Compromise
+
+**These agent prompts are engineered for free models.** Get professional, expert-level results without paid subscriptions.
+
+✅ **GitHub Copilot Free** - ⭐⭐⭐⭐⭐ Excellent
+✅ **ChatGPT Free** (GPT-4o mini) - ⭐⭐⭐⭐⭐ Excellent
+✅ **Claude Free** - ⭐⭐⭐⭐⭐ Excellent
+✅ **Gemini Free** - ⭐⭐⭐⭐ Very Good
+
+### Why Quality Is Identical:
+
+Each agent prompt includes:
+- ✅ Complete frameworks (self-contained, no external knowledge needed)
+- ✅ Structured templates (free models follow them perfectly)
+- ✅ Concrete examples (guides output format)
+- ✅ Quality checklists (built-in validation)
+
+**Result**: Free models produce the same expert-level analysis as paid models. The structured prompts compensate for any capability differences.
+
+📖 **Optimization Guide**: [`.agent/FREE_MODELS_GUIDE.md`](.agent/FREE_MODELS_GUIDE.md)
+
+---
+
+## 🔧 Configuration
+
+**Settings** (`Ctrl+,`):
+- `Azure DevOps PBI Analyzer: Organization` - Default org URL
+
+**Azure DevOps PAT**:
+- Required for API access
+- Scopes: Work Items (Read)
+- Stored securely in VS Code Secret Storage
+
+---
+
+## 📦 Installation
+
+### From VS Code Marketplace
+
+1. Search "Azure DevOps PBI Analyzer"
+2. Click Install
+
+### From `.vsix` File
+
+```bash
+code --install-extension azdo-pbi-analyzer-1.0.3.vsix
+```
+
+---
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## 📄 License
+
+MIT License - See [LICENSE](LICENSE)
+
+---
+
+## 🎯 Key Takeaway
+
+**You DON'T need the extension to use the AI agents!**
+
+The 27 expert agents work with:
+- ✅ GitHub Copilot (Free or Paid)
+- ✅ ChatGPT Free
+- ✅ Claude Free
+- ✅ Any other AI model
+
+Just copy-paste or use `#file:` references in Copilot Chat!
+
+📘 **Get Started**: Read [`.agent/HOW_TO_USE.md`](.agent/HOW_TO_USE.md)
