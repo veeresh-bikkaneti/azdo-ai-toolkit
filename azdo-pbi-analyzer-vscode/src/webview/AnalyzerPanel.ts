@@ -104,10 +104,16 @@ export class AnalyzerPanel {
         try {
             this._postStatus('Parsing PBI URL...');
 
-            const pbiInfo = DevOpsClient.parsePbiUrl(pbiUrl);
+            const defaultOrg = vscode.workspace
+                .getConfiguration('azdoPbiAnalyzer')
+                .get<string>('organization', '')
+                .trim();
+            const pbiInfo = DevOpsClient.parsePbiUrl(pbiUrl, defaultOrg || undefined);
             if (!pbiInfo) {
                 throw new Error(
-                    'Invalid PBI URL. Expected format: https://dev.azure.com/{org}/{project}/_workitems/edit/{id}'
+                    'Invalid PBI reference. Expected a work item URL ' +
+                    '(https://dev.azure.com/{org}/{project}/_workitems/edit/{id}) or a numeric ID ' +
+                    '(requires the "Azure DevOps PBI Analyzer: Organization" setting).'
                 );
             }
 
@@ -116,7 +122,7 @@ export class AnalyzerPanel {
 
             this._postStatus(`Fetching PBI ${pbiInfo.id} from Azure DevOps...`);
             const client = new DevOpsClient(pbiInfo.orgUrl, finalPat);
-            const workItem = await client.getWorkItem(pbiInfo.id, pbiInfo.project);
+            const workItem = await client.getWorkItem(pbiInfo.id, pbiInfo.project || undefined);
 
             if (!workItem) {
                 throw new Error(`Work item ${pbiInfo.id} not found.`);

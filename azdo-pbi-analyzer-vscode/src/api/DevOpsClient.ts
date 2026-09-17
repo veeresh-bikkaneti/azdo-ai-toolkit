@@ -12,37 +12,78 @@ export class DevOpsClient {
         this._workItemTrackingApi = this._connection.getWorkItemTrackingApi();
     }
 
-    public static parsePbiUrl(pbiUrl: string): { orgUrl: string; project: string; id: number } | null {
-        try {
-            const url = new URL(pbiUrl);
-            const pathParts = url.pathname.split('/').filter((p) => p);
+    /**
+     * Parses a PBI reference into { orgUrl, project, id }.
+     *
+     * Accepts:
+     * - Full work-item URLs: https://dev.azure.com/{org}/{project}/_workitems/edit/{id}
+     * - Legacy visualstudio.com URLs
+     * - Board URLs carrying ?workitem={id} (or ?id={id})
+     * - On-premises TFS/Azure DevOps Server URLs
+     * - A bare numeric ID (uses defaultOrgUrl when supplied)
+     */
+    public static parsePbiUrl(
+        pbiUrl: string,
+        defaultOrgUrl?: string
+    ): { orgUrl: string; project: string; id: number } | null {
+        const trimmed = (pbiUrl || '').trim();
 
-            let org = '';
-            let project = '';
-            let id = 0;
-            let orgUrl = '';
+        // Bare numeric ID, e.g. "12345"
+        if (/^\d+$/.test(trimmed)) {
+            const orgUrl = (defaultOrgUrl || '').trim().replace(/\/+$/, '');
+            if (!orgUrl) {
+                return null;
+            }
+            return { orgUrl, project: '', id: parseInt(trimmed, 10) };
+        }
+
+        try {
+            const url = new URL(trimmed);
+            const pathParts = url.pathname.split('/').filter((p) => p);
+            const queryId = url.searchParams.get('workitem') || url.searchParams.get('id');
+            const numericQueryId =
+                queryId && /^\d+$/.test(queryId) ? parseInt(queryId, 10) : null;
+
+            const editIndex = pathParts.findIndex(
+                (p, i) => p === '_workitems' && pathParts[i + 1] === 'edit'
+            );
+            const editId =
+                editIndex >= 0 && /^\d+$/.test(pathParts[editIndex + 2] || '')
+                    ? parseInt(pathParts[editIndex + 2], 10)
+                    : null;
+
+            const id = editId ?? numericQueryId;
+            if (!id) {
+                return null;
+            }
 
             if (url.hostname === 'dev.azure.com') {
-                if (pathParts.length >= 5 && pathParts[2] === '_workitems' && pathParts[3] === 'edit') {
-                    org = pathParts[0];
-                    project = pathParts[1];
-                    id = parseInt(pathParts[4]);
-                    orgUrl = `https://dev.azure.com/${org}`;
+                const org = pathParts[0];
+                const project = pathParts[1] && pathParts[1] !== '_workitems' ? pathParts[1] : '';
+                if (!org) {
+                    return null;
                 }
-            } else if (url.hostname.endsWith('.visualstudio.com')) {
-                if (pathParts.length >= 4 && pathParts[1] === '_workitems' && pathParts[2] === 'edit') {
-                    org = url.hostname.split('.')[0];
-                    project = pathParts[0];
-                    id = parseInt(pathParts[3]);
-                    orgUrl = `https://${org}.visualstudio.com`;
-                }
+                return { orgUrl: `https://dev.azure.com/${org}`, project, id };
             }
 
-            if (org && project && id) {
-                return { orgUrl, project, id };
+            if (url.hostname.endsWith('.visualstudio.com')) {
+                const org = url.hostname.split('.')[0];
+                const project = pathParts[0] && pathParts[0] !== '_workitems' ? pathParts[0] : '';
+                return { orgUrl: `https://${org}.visualstudio.com`, project, id };
             }
 
-            return null;
+            // On-premises TFS / Azure DevOps Server:
+            // http(s)://server[:port]/tfs/{collection}/{project}/_workitems/edit/{id}
+            // or http(s)://server[:port]/{collection}/{project}/_workitems/edit/{id}
+            const tfsIndex = pathParts.findIndex((p) => p.toLowerCase() === 'tfs');
+            const baseParts = tfsIndex >= 0 ? pathParts.slice(0, tfsIndex + 2) : pathParts.slice(0, 1);
+            const projectIndex = editIndex >= 0 ? editIndex - 1 : baseParts.length;
+            const project =
+                projectIndex >= baseParts.length && pathParts[projectIndex] && !pathParts[projectIndex].startsWith('_')
+                    ? pathParts[projectIndex]
+                    : '';
+            const orgUrl = `${url.protocol}//${url.host}/${baseParts.join('/')}`;
+            return { orgUrl, project, id };
         } catch {
             return null;
         }

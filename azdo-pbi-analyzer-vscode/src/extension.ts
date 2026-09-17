@@ -3,11 +3,13 @@ import { AnalyzerPanel } from './webview/AnalyzerPanel';
 import { AnalyzePbiCommand } from './commands/AnalyzePbiCommand';
 import { InstallAgentsCommand } from './commands/InstallAgentsCommand';
 import { PbiChatParticipant } from './chat/PbiChatParticipant';
+import { clearApiKey, promptAndStoreApiKey, resolveAiProvider } from './ai/aiConfig';
 
 export function activate(context: vscode.ExtensionContext) {
 
-    // Initialize Copilot Chat Participant
+    // Initialize Copilot Chat Participant (with real multi-provider AI support)
     const chatParticipant = new PbiChatParticipant(context);
+    chatParticipant.setAiResolver(() => resolveAiProvider(context));
     chatParticipant.initialize();
 
     // Register command to analyze PBI
@@ -35,7 +37,29 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(analyzePbiCommand, openPanelCommand, installAgentsCommand);
+    // Register command to store the AI provider API key in SecretStorage
+    const setAiApiKeyCommand = vscode.commands.registerCommand(
+        'azdoPbiAnalyzer.setAiApiKey',
+        async () => {
+            await promptAndStoreApiKey(context);
+        }
+    );
+
+    // Register command to remove the stored AI provider API key
+    const clearAiApiKeyCommand = vscode.commands.registerCommand(
+        'azdoPbiAnalyzer.clearAiApiKey',
+        async () => {
+            await clearApiKey(context);
+        }
+    );
+
+    context.subscriptions.push(
+        analyzePbiCommand,
+        openPanelCommand,
+        installAgentsCommand,
+        setAiApiKeyCommand,
+        clearAiApiKeyCommand
+    );
 }
 
 export function deactivate() { }

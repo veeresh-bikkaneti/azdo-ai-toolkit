@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import { PbiAnalyzer, PbiContext } from '../analyzers/PbiAnalyzer';
+import type { AiResolution } from '../ai/aiConfig';
+import { buildPersonaMessages, buildPbiContextBlock, isPersonaId, PersonaId } from '../ai/prompts';
 
 export class PbiChatParticipant {
     private _participant: vscode.ChatParticipant | undefined;
     private _currentPbi: PbiContext | null = null;
+    private _aiResolver?: () => Promise<AiResolution>;
 
     constructor(private context: vscode.ExtensionContext) { }
 
@@ -16,6 +19,15 @@ export class PbiChatParticipant {
 
     public setCurrentPbi(pbi: PbiContext): void {
         this._currentPbi = pbi;
+    }
+
+    /**
+     * Registers how this participant obtains an AI provider. When no resolver
+     * is set (or it resolves to null), the participant falls back to the
+     * built-in rule-based heuristics so it still works fully offline.
+     */
+    public setAiResolver(resolver: () => Promise<AiResolution>): void {
+        this._aiResolver = resolver;
     }
 
     private async handleChatRequest(
@@ -34,6 +46,15 @@ export class PbiChatParticipant {
         const prompt = request.prompt.trim();
 
         try {
+            // Persona commands go through a real AI provider when one is
+            // configured; otherwise the rule-based heuristics below run.
+            if (isPersonaId(command)) {
+                const handledByAi = await this.tryAiPersona(command, this._currentPbi, prompt || undefined, stream, token);
+                if (handledByAi) {
+                    return;
+                }
+            }
+
             switch (command) {
                 case 'analyze':
                     await this.handleFullAnalysis(stream, this._currentPbi);
@@ -68,6 +89,57 @@ export class PbiChatParticipant {
             }
         } catch (error) {
             stream.markdown(`❌ Error: ${error instanceof Error ? error.message : String(error)}\n`);
+        }
+    }
+
+    /**
+     * Attempts to answer with the configured AI provider. Returns true when
+     * the AI produced the response; false when the caller should fall back
+     * to the built-in rule-based heuristics (provider not configured, or the
+     * call failed and the failure was already surfaced to the user).
+     */
+    private async tryAiPersona(
+        persona: PersonaId,
+        pbi: PbiContext,
+        userQuestion: string | undefined,
+        stream: vscode.ChatResponseStream,
+        token: vscode.CancellationToken
+    ): Promise<boolean> {
+        if (!this._aiResolver) {
+            return false;
+        }
+
+        let resolution: AiResolution;
+        try {
+            resolution = await this._aiResolver();
+        } catch {
+            return false;
+        }
+
+        const provider = resolution.provider;
+        if (!provider) {
+            // Not configured (or disabled): silent fallback to heuristics.
+            return false;
+        }
+
+        try {
+            stream.progress(`Consulting ${provider.displayName}…`);
+            const messages = buildPersonaMessages(persona, pbi, userQuestion);
+            await provider.complete(
+                messages,
+                { temperature: 0.3, maxTokens: 4000 },
+                (t) => stream.markdown(t),
+                token
+            );
+            stream.markdown('\n');
+            return true;
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            stream.markdown(
+                `\n> ⚠️ AI provider (${provider.displayName}) failed: ${detail}\n` +
+                `> Falling back to rule-based analysis.\n\n`
+            );
+            return false;
         }
     }
 
@@ -197,6 +269,40 @@ export class PbiChatParticipant {
         pbi: PbiContext,
         question: string
     ): Promise<void> {
+        // A free-form question also deserves a real answer when AI is available.
+        if (this._aiResolver) {
+            try {
+                const resolution = await this._aiResolver();
+                if (resolution.provider) {
+                    const provider = resolution.provider;
+                    stream.progress(`Consulting ${provider.displayName}…`);
+                    await provider.complete(
+                        [
+                            {
+                                role: 'system',
+                                content:
+                                    'You are an expert QA assistant. Answer the user\'s question about the Azure DevOps ' +
+                                    'PBI below precisely, referencing its acceptance criteria where relevant. ' +
+                                    'Format the answer in Markdown.',
+                            },
+                            {
+                                role: 'user',
+                                content: `PBI context:\n${buildPbiContextBlock(pbi)}\n\nQuestion: ${question}`,
+                            },
+                        ],
+                        { temperature: 0.3, maxTokens: 2000 },
+                        (t) => stream.markdown(t),
+                        undefined
+                    );
+                    stream.markdown('\n');
+                    return;
+                }
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                stream.markdown(`\n> ⚠️ AI provider failed: ${detail}\n\n`);
+            }
+        }
+
         stream.markdown(`I can help with questions about **${pbi.title}**.\n\n`);
         stream.markdown(`Try using one of the specialized commands like \`/critical-review\` or \`/qa-engineer\` for detailed analysis.\n`);
     }
