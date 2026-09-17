@@ -34,6 +34,14 @@
       {
         "command": "azdoPbiAnalyzer.installAgents",
         "title": "Azure DevOps: Install AI Agents and Workflows"
+      },
+      {
+        "command": "azdoPbiAnalyzer.setAiApiKey",
+        "title": "Azure DevOps: Set AI Provider API Key"
+      },
+      {
+        "command": "azdoPbiAnalyzer.clearAiApiKey",
+        "title": "Azure DevOps: Clear AI Provider API Key"
       }
     ],
     "chatParticipants": [
@@ -77,6 +85,33 @@
           "type": "string",
           "default": "",
           "description": "Default Azure DevOps organization URL (e.g., https://dev.azure.com/yourorg)"
+        },
+        "azdoPbiAnalyzer.aiEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use a real AI provider for chat persona analysis. When off (or when no provider is configured), the built-in rule-based analysis is used."
+        },
+        "azdoPbiAnalyzer.aiProvider": {
+          "type": "string",
+          "enum": ["vscode", "openai-compatible", "anthropic", "gemini"],
+          "enumDescriptions": [
+            "Use the language models already available in VS Code (e.g. via GitHub Copilot). No API key needed.",
+            "Any OpenAI-compatible chat completions endpoint: OpenAI, Azure OpenAI, Ollama, LM Studio, OpenRouter, Together, DeepSeek, xAI, ...",
+            "Anthropic Claude via the Messages API.",
+            "Google Gemini via the Generative Language API."
+          ],
+          "default": "vscode",
+          "description": "Which AI provider backs the @azdo chat participant personas."
+        },
+        "azdoPbiAnalyzer.aiModel": {
+          "type": "string",
+          "default": "",
+          "description": "Model to use (e.g. gpt-4o-mini, claude-sonnet-4-5, gemini-2.5-flash, llama3.1, or copilot/gpt-4o for the VS Code provider). Leave empty for the provider default."
+        },
+        "azdoPbiAnalyzer.aiEndpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL for the OpenAI-compatible provider (e.g. https://api.openai.com/v1, http://localhost:11434/v1 for Ollama, or a full Azure OpenAI deployment URL). Ignored by other providers."
         }
       }
     }
@@ -84,11 +119,11 @@
   "scripts": {
     "release": "npm version patch && vsce package",
     "vscode:prepublish": "npm run package",
-    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
-    "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && node scripts/copy-agent-assets.js",
+    "watch": "node scripts/copy-agent-assets.js && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && node scripts/copy-agent-assets.js",
     "test": "npm run test-compile && node ./out/test/runTest.js",
-    "test:unit": "mocha -r ts-node/register --ui tdd src/test/suite/generators.test.ts",
+    "test:unit": "mocha -r ts-node/register --ui tdd src/test/suite/generators.test.ts src/test/suite/ai-providers.test.ts src/test/suite/devops-client.test.ts",
     "test-compile": "tsc -p ./"
   },
   "devDependencies": {

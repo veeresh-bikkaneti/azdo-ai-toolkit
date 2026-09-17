@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'azdo-pbi-analyzer-vscode/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'azdo-pbi-analyzer-vscode/**'
+      - '.github/workflows/ci.yml'
+
+defaults:
+  run:
+    working-directory: azdo-pbi-analyzer-vscode
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: azdo-pbi-analyzer-vscode/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security audit (production deps)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Package extension
+        run: npm run package
+
+      - name: Verify agent assets are bundled
+        run: |
+          test -f dist/assets/.agent/HOW_TO_USE.md || (echo "agent assets missing from dist" && exit 1)
+          test -f dist/assets/.agent/ARCHITECTURE.md || (echo "ARCHITECTURE.md missing from dist" && exit 1)
+          echo "agent assets bundled: $(find dist/assets/.agent -type f | wc -l) files"

@@ -4,6 +4,7 @@ import { GherkinGenerator } from '../generators/GherkinGenerator';
 import { CypressGenerator } from '../generators/CypressGenerator';
 import { PlaywrightGenerator } from '../generators/PlaywrightGenerator';
 import { ManualTestGenerator } from '../generators/ManualTestGenerator';
+import { WorkItemHierarchy } from '../api/DevOpsClient';
 
 export interface PbiContext {
     id: number;
@@ -51,8 +52,13 @@ export class PbiAnalyzer {
         this._manualTestGenerator = new ManualTestGenerator();
     }
 
-    public analyze(workItem: WorkItem, parentItem?: WorkItem | null, relatedItems?: WorkItem[]): AnalysisResult {
-        const pbi = this.extractPbiContext(workItem, parentItem, relatedItems);
+    public analyze(
+        workItem: WorkItem,
+        parentItem?: WorkItem | null,
+        relatedItems?: WorkItem[],
+        hierarchy?: WorkItemHierarchy
+    ): AnalysisResult {
+        const pbi = this.extractPbiContext(workItem, parentItem, relatedItems, hierarchy);
 
         const testScenarios = this._scenarioGenerator.generate(pbi.acceptanceCriteria);
         const gherkin = this._gherkinGenerator.generate(pbi.title, testScenarios);
@@ -77,7 +83,8 @@ export class PbiAnalyzer {
     private extractPbiContext(
         workItem: WorkItem,
         parentItem?: WorkItem | null,
-        relatedItems?: WorkItem[]
+        relatedItems?: WorkItem[],
+        hierarchy?: WorkItemHierarchy
     ): PbiContext {
         const fields = workItem.fields || {};
         const id = workItem.id || 0;
@@ -121,6 +128,13 @@ export class PbiAnalyzer {
                     state: f['System.State'] || '',
                 };
             });
+        }
+
+        // Full hierarchy (populated when the caller fetches recursively).
+        if (hierarchy) {
+            context.parentChain = hierarchy.parentChain;
+            context.children = hierarchy.children;
+            context.dependencies = hierarchy.dependencies;
         }
 
         return context;

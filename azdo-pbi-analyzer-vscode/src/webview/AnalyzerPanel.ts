@@ -1,13 +1,47 @@
 import * as vscode from 'vscode';
-import { DevOpsClient } from '../api/DevOpsClient';
-import { PbiAnalyzer, AnalysisResult } from '../analyzers/PbiAnalyzer';
+import { DevOpsClient, AzdoApiError } from '../api/DevOpsClient';
+import { PbiAnalyzer, AnalysisResult, PbiContext } from '../analyzers/PbiAnalyzer';
 import { OutputWriter } from '../output/OutputWriter';
 import { readEnvValue } from '../utils/envReader';
+
+/**
+ * Converts internal errors into safe, actionable user messages.
+ * Typed AzdoApiErrors already carry user-safe text; anything else is
+ * collapsed to a generic message so transport internals (which can include
+ * auth material) never reach the webview.
+ */
+function toUserFacingError(error: unknown): string {
+    if (error instanceof AzdoApiError) {
+        switch (error.code) {
+            case 'auth':
+                return (
+                    '🔑 Azure DevOps rejected your credentials. Your PAT may be expired or lack "Work Items (Read)" scope. ' +
+                    'Generate a new PAT and enter it in the panel — it will be stored securely.'
+                );
+            case 'not-found':
+                return '🔍 Work item not found. Check the ID/URL and make sure the project is correct.';
+            case 'timeout':
+                return '⏱️ Azure DevOps took too long to respond. Check your connection and try again.';
+            case 'network':
+                return '🌐 Could not reach Azure DevOps. Check your network connection and proxy settings.';
+            default:
+                return `❌ ${error.message}`;
+        }
+    }
+    return '❌ Failed to analyze the PBI. Check the URL and try again.';
+}
 
 export class AnalyzerPanel {
     public static currentPanel: AnalyzerPanel | undefined;
     private static readonly viewType = 'azdoPbiAnalyzer';
     private static readonly patKey = 'azdoPbiAnalyzer.pat';
+
+    /**
+     * Fired with the analyzed PBI context after a successful analysis.
+     * The extension host wires this to PbiChatParticipant.setCurrentPbi so
+     * `@azdo` chat commands work on the PBI you just analyzed.
+     */
+    public static onDidAnalyzePbi: ((pbi: PbiContext) => void) | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _context: vscode.ExtensionContext;
@@ -53,15 +87,20 @@ export class AnalyzerPanel {
 
         this._panel.webview.onDidReceiveMessage(
             async (message) => {
+                // Validate the message envelope: the webview only ever sends
+                // known commands with string payloads.
+                if (!message || typeof message.command !== 'string') {
+                    return;
+                }
                 switch (message.command) {
                     case 'analyzePbi':
-                        await this._handleAnalyzePbi(message.pbiUrl, message.pat);
+                        await this._handleAnalyzePbi(String(message.pbiUrl ?? ''), String(message.pat ?? ''));
                         break;
                     case 'error':
-                        vscode.window.showErrorMessage(message.text);
+                        vscode.window.showErrorMessage(String(message.text ?? 'Unknown error'));
                         break;
                     case 'info':
-                        vscode.window.showInformationMessage(message.text);
+                        vscode.window.showInformationMessage(String(message.text ?? ''));
                         break;
                 }
             },
@@ -75,22 +114,23 @@ export class AnalyzerPanel {
     }
 
     private async _resolvePat(userProvidedPat: string): Promise<string> {
-        // 1. User-provided PAT
+        // 1. User-provided PAT (also remembered for next time)
         if (userProvidedPat) {
             await this._context.secrets.store(AnalyzerPanel.patKey, userProvidedPat);
             return userProvidedPat;
         }
 
-        // 2. .env file in workspace root
-        const envPat = readEnvValue('AZDO_PAT');
-        if (envPat) {
-            return envPat;
-        }
-
-        // 3. VS Code secrets store
+        // 2. VS Code Secret Storage (OS keychain — preferred over plaintext)
         const storedPat = await this._context.secrets.get(AnalyzerPanel.patKey);
         if (storedPat) {
             return storedPat;
+        }
+
+        // 3. .env file in workspace root (least secure: plaintext on disk —
+        //    convenient for automation, but SecretStorage is preferred)
+        const envPat = readEnvValue('AZDO_PAT');
+        if (envPat) {
+            return envPat;
         }
 
         throw new Error(
@@ -104,37 +144,48 @@ export class AnalyzerPanel {
         try {
             this._postStatus('Parsing PBI URL...');
 
-            const pbiInfo = DevOpsClient.parsePbiUrl(pbiUrl);
+            const defaultOrg = vscode.workspace
+                .getConfiguration('azdoPbiAnalyzer')
+                .get<string>('organization', '')
+                .trim();
+            const pbiInfo = DevOpsClient.parsePbiUrl(pbiUrl, defaultOrg || undefined);
             if (!pbiInfo) {
                 throw new Error(
-                    'Invalid PBI URL. Expected format: https://dev.azure.com/{org}/{project}/_workitems/edit/{id}'
+                    'Invalid PBI reference. Expected a work item URL ' +
+                    '(https://dev.azure.com/{org}/{project}/_workitems/edit/{id}) or a numeric ID ' +
+                    '(requires the "Azure DevOps PBI Analyzer: Organization" setting).'
                 );
             }
 
             this._postStatus('Resolving PAT...');
             const finalPat = await this._resolvePat(pat);
 
-            this._postStatus(`Fetching PBI ${pbiInfo.id} from Azure DevOps...`);
+            this._postStatus(`Fetching PBI ${pbiInfo.id} with full hierarchy from Azure DevOps...`);
             const client = new DevOpsClient(pbiInfo.orgUrl, finalPat);
-            const workItem = await client.getWorkItem(pbiInfo.id, pbiInfo.project);
+            const tree = await client.getWorkItemRecursively(pbiInfo.id, 3);
 
-            if (!workItem) {
+            if (!tree) {
                 throw new Error(`Work item ${pbiInfo.id} not found.`);
             }
 
-            this._postStatus('Fetching parent epic/feature...');
-            const parentItem = await client.getParentWorkItem(workItem);
-
-            this._postStatus('Fetching related work items...');
-            const relatedItems = await client.getRelatedWorkItems(workItem, 10);
+            const hierarchy = client.buildWorkItemSummary(tree);
+            const parentItem = tree.parent?.workItem ?? null;
+            const relatedItems = tree.related.map((r) => r.workItem);
 
             this._postStatus('Analyzing requirements and generating artifacts...');
             const analyzer = new PbiAnalyzer();
-            const result = analyzer.analyze(workItem, parentItem, relatedItems);
+            const result = analyzer.analyze(tree.workItem, parentItem, relatedItems, hierarchy);
 
             this._postStatus('Saving artifacts to workspace...');
             const outputWriter = new OutputWriter();
             const outputDir = await outputWriter.write(result);
+
+            // Hand the analyzed PBI to the chat participant (@azdo).
+            try {
+                AnalyzerPanel.onDidAnalyzePbi?.(result.pbi);
+            } catch {
+                // Chat handoff is best-effort; the analysis already succeeded.
+            }
 
             this._panel.webview.postMessage({
                 command: 'analysisComplete',
@@ -148,7 +199,7 @@ export class AnalyzerPanel {
         } catch (error: any) {
             this._panel.webview.postMessage({
                 command: 'error',
-                message: error.message || 'Failed to analyze PBI',
+                message: toUserFacingError(error),
             });
         }
     }
@@ -177,6 +228,9 @@ export class AnalyzerPanel {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- Defense in depth: this webview uses only inline styles/scripts and
+         loads no external resources, so lock everything else down. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azure DevOps PBI Analyzer</title>
     <style>
@@ -263,21 +317,91 @@ export class AnalyzerPanel {
         .results { display: none; }
         .results.visible { display: block; }
 
-        .section {
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-panel-border, #333);
-            border-radius: 6px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-
         .output-path {
             background: var(--vscode-textCodeBlock-background);
             padding: 8px 12px;
             border-radius: 4px;
             font-family: monospace;
             font-size: 13px;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* ---- Tabs ---- */
+        .tabs {
+            display: flex;
+            gap: 2px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid var(--vscode-panel-border, #333);
+            margin-bottom: 14px;
+        }
+
+        .tab {
+            background: transparent;
+            color: var(--vscode-descriptionForeground);
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .tab:hover { background: var(--vscode-textCodeBlock-background); }
+        .tab.active {
+            color: var(--vscode-button-background);
+            border-bottom-color: var(--vscode-button-background);
+        }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* ---- Rendered markdown ---- */
+        .md { font-size: 13px; }
+        .md h2 { font-size: 17px; margin: 14px 0 8px; }
+        .md h3 { font-size: 15px; margin: 12px 0 6px; }
+        .md h4 { font-size: 13px; margin: 10px 0 4px; }
+        .md p { margin: 6px 0; }
+        .md ul, .md ol { margin: 6px 0 6px 20px; }
+        .md li { margin-bottom: 4px; }
+        .md blockquote {
+            border-left: 3px solid var(--vscode-charts-blue);
+            padding: 4px 12px;
+            margin: 8px 0;
+            color: var(--vscode-descriptionForeground);
+        }
+        .md code {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .md hr {
+            border: none;
+            border-top: 1px solid var(--vscode-panel-border, #444);
+            margin: 12px 0;
+        }
+        .md table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+        .md th, .md td {
+            border: 1px solid var(--vscode-panel-border, #444);
+            padding: 6px 10px;
+            text-align: left;
+        }
+        .md th {
+            background: var(--vscode-textCodeBlock-background);
+            font-weight: 600;
+        }
+
+        /* ---- Code panes with copy ---- */
+        .code-wrap { position: relative; }
+
+        .code-wrap pre {
+            padding-top: 36px;
         }
 
         pre {
@@ -292,6 +416,15 @@ export class AnalyzerPanel {
             word-wrap: break-word;
         }
 
+        .copy-btn {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
         .tag {
             display: inline-block;
             padding: 2px 8px;
@@ -304,27 +437,6 @@ export class AnalyzerPanel {
         .tag-smoke { background: #1a6b1a; color: #fff; }
         .tag-critical { background: #b33030; color: #fff; }
         .tag-non-regression { background: #4a4a8a; color: #fff; }
-
-        ul, ol { margin-left: 20px; margin-top: 4px; }
-        li { margin-bottom: 4px; font-size: 13px; }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 8px 0;
-            font-size: 12px;
-        }
-
-        th, td {
-            border: 1px solid var(--vscode-panel-border, #444);
-            padding: 6px 10px;
-            text-align: left;
-        }
-
-        th {
-            background: var(--vscode-textCodeBlock-background);
-            font-weight: 600;
-        }
 
         .error-banner {
             background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
@@ -351,6 +463,7 @@ export class AnalyzerPanel {
                     placeholder="https://dev.azure.com/org/project/_workitems/edit/12345"
                     value="${pbiUrl || ''}"
                 />
+                <div class="hint">Paste a work-item URL, board URL (with ?workitem=), or just the ID (e.g. 12345) when a default org is set.</div>
             </div>
 
             <div class="form-group">
@@ -372,47 +485,63 @@ export class AnalyzerPanel {
         <div id="results" class="results">
             <div id="outputPath" class="output-path"></div>
 
-            <div class="section">
-                <h2>📋 Story Analysis</h2>
-                <pre id="storyAnalysis"></pre>
+            <div class="tabs">
+                <button class="tab active" data-tab="story" onclick="showTab('story')">📋 Story</button>
+                <button class="tab" data-tab="scenarios" onclick="showTab('scenarios')">🧪 Scenarios</button>
+                <button class="tab" data-tab="manual" onclick="showTab('manual')">📝 Manual</button>
+                <button class="tab" data-tab="gherkin" onclick="showTab('gherkin')">🥒 Gherkin</button>
+                <button class="tab" data-tab="cypress" onclick="showTab('cypress')">🌲 Cypress</button>
+                <button class="tab" data-tab="playwright" onclick="showTab('playwright')">🎭 Playwright</button>
             </div>
 
-            <div class="section">
-                <h2>🧪 Test Scenarios</h2>
+            <div id="tab-story" class="tab-pane active">
+                <div id="storyAnalysis" class="md"></div>
+            </div>
+
+            <div id="tab-scenarios" class="tab-pane">
                 <div id="testScenarios"></div>
             </div>
 
-            <div class="section">
-                <h2>📝 Manual Test Cases</h2>
-                <pre id="manualTests"></pre>
+            <div id="tab-manual" class="tab-pane">
+                <div class="code-wrap">
+                    <button class="copy-btn" onclick="copyBlock('manualTests', this)">Copy</button>
+                    <pre id="manualTests"></pre>
+                </div>
             </div>
 
-            <div class="section">
-                <h2>🥒 Gherkin Specification</h2>
-                <pre id="gherkinCode"></pre>
+            <div id="tab-gherkin" class="tab-pane">
+                <div class="code-wrap">
+                    <button class="copy-btn" onclick="copyBlock('gherkinCode', this)">Copy</button>
+                    <pre id="gherkinCode"></pre>
+                </div>
             </div>
 
-            <div class="section">
-                <h2>🌲 Cypress Pseudo-code</h2>
-                <pre id="cypressCode"></pre>
+            <div id="tab-cypress" class="tab-pane">
+                <div class="code-wrap">
+                    <button class="copy-btn" onclick="copyBlock('cypressCode', this)">Copy</button>
+                    <pre id="cypressCode"></pre>
+                </div>
             </div>
 
-            <div class="section">
-                <h2>🎭 Playwright Pseudo-code</h2>
-                <pre id="playwrightCode"></pre>
+            <div id="tab-playwright" class="tab-pane">
+                <div class="code-wrap">
+                    <button class="copy-btn" onclick="copyBlock('playwrightCode', this)">Copy</button>
+                    <pre id="playwrightCode"></pre>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
         const vscode = acquireVsCodeApi();
+        const BT = String.fromCharCode(96); // backtick, kept out of the source template
 
         function analyzePbi() {
             const pbiUrl = document.getElementById('pbiUrl').value.trim();
             const pat = document.getElementById('pat').value.trim();
 
             if (!pbiUrl) {
-                vscode.postMessage({ command: 'error', text: 'Please enter a PBI URL' });
+                showError('Please enter a PBI URL or ID.');
                 return;
             }
 
@@ -440,47 +569,198 @@ export class AnalyzerPanel {
             return div.innerHTML;
         }
 
+        function inlineMd(text) {
+            return text
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(new RegExp(BT + '([^' + BT + ']+)' + BT, 'g'), '<code>$1</code>');
+        }
+
+        function tableCells(row) {
+            return row.split('|').slice(1, -1).map(function (c) { return c.trim(); });
+        }
+
+        function isTableRow(line) {
+            return /^\|.*\|$/.test(line);
+        }
+
+        function isTableSeparator(line) {
+            return line.indexOf('-') !== -1 && /^\|?[\s|:-]+\|?$/.test(line);
+        }
+
+        // Minimal markdown renderer: headings, bold, inline code, lists,
+        // blockquotes, tables, horizontal rules, paragraphs.
+        function renderMarkdown(src) {
+            const lines = escapeHtml(src || '').split('\n');
+            let html = '';
+            let para = [];
+            let listTag = '';
+            let inTable = false;
+            let tableHeaderDone = false;
+
+            function flushPara() {
+                if (para.length) {
+                    html += '<p>' + inlineMd(para.join(' ')) + '</p>';
+                    para = [];
+                }
+            }
+
+            function closeList() {
+                if (listTag) {
+                    html += '</' + listTag + '>';
+                    listTag = '';
+                }
+            }
+
+            function closeTable() {
+                if (inTable) {
+                    html += '</tbody></table>';
+                    inTable = false;
+                    tableHeaderDone = false;
+                }
+            }
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const t = line.trim();
+
+                if (!t) {
+                    flushPara(); closeList(); closeTable();
+                    continue;
+                }
+
+                const hMatch = t.match(/^(#{1,4})\s+(.*)$/);
+                if (hMatch) {
+                    flushPara(); closeList(); closeTable();
+                    const level = Math.min(hMatch[1].length + 1, 4);
+                    html += '<h' + level + '>' + inlineMd(hMatch[2]) + '</h' + level + '>';
+                    continue;
+                }
+
+                if (/^---+$/.test(t)) {
+                    flushPara(); closeList(); closeTable();
+                    html += '<hr/>';
+                    continue;
+                }
+
+                if (isTableRow(t)) {
+                    flushPara(); closeList();
+                    if (isTableSeparator(t)) { continue; }
+                    if (!inTable) {
+                        html += '<table><thead>';
+                        inTable = true;
+                        tableHeaderDone = false;
+                    }
+                    const cells = tableCells(t);
+                    const tag = tableHeaderDone ? 'td' : 'th';
+                    html += '<tr>' + cells.map(function (c) {
+                        return '<' + tag + '>' + inlineMd(c) + '</' + tag + '>';
+                    }).join('') + '</tr>';
+                    if (!tableHeaderDone) {
+                        html += '</thead><tbody>';
+                        tableHeaderDone = true;
+                    }
+                    continue;
+                }
+                closeTable();
+
+                const quote = t.match(/^&gt;\s?(.*)$/);
+                if (quote) {
+                    flushPara(); closeList();
+                    html += '<blockquote>' + inlineMd(quote[1]) + '</blockquote>';
+                    continue;
+                }
+
+                const ul = t.match(/^[-*]\s+(.*)$/);
+                const ol = t.match(/^\d+[.)]\s+(.*)$/);
+                if (ul || ol) {
+                    flushPara();
+                    const tag = ul ? 'ul' : 'ol';
+                    if (listTag !== tag) {
+                        closeList();
+                        html += '<' + tag + '>';
+                        listTag = tag;
+                    }
+                    html += '<li>' + inlineMd((ul || ol)[1]) + '</li>';
+                    continue;
+                }
+                closeList();
+
+                para.push(t);
+            }
+
+            flushPara(); closeList(); closeTable();
+            return html;
+        }
+
+        function showTab(name) {
+            const tabs = document.querySelectorAll('.tab');
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === name);
+            }
+            const panes = document.querySelectorAll('.tab-pane');
+            for (let i = 0; i < panes.length; i++) {
+                panes[i].classList.toggle('active', panes[i].id === 'tab-' + name);
+            }
+        }
+
+        function copyBlock(id, btn) {
+            const text = document.getElementById(id).textContent || '';
+            function done(ok) {
+                btn.textContent = ok ? 'Copied ✓' : 'Failed';
+                setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    done(true);
+                } catch (e) {
+                    done(false);
+                }
+                document.body.removeChild(ta);
+            }
+        }
+
         function showResults(data, outputDir) {
             hideStatus();
             document.getElementById('analyzeBtn').disabled = false;
 
-            // Output path
             if (outputDir) {
                 document.getElementById('outputPath').textContent = '📁 Artifacts saved to: ' + outputDir;
             }
 
-            // Story analysis (plain text, already markdown)
-            document.getElementById('storyAnalysis').textContent = data.analysis.storyAnalysis;
+            // Story analysis rendered as markdown
+            document.getElementById('storyAnalysis').innerHTML = renderMarkdown(data.analysis.storyAnalysis);
 
             // Test scenarios
-            const scenariosHtml = data.analysis.testScenarios.map(function(s) {
+            const scenariosHtml = data.analysis.testScenarios.map(function (s) {
                 const tagClass = 'tag-' + s.tag.replace(' ', '-');
-                const stepsHtml = s.steps.map(function(step, i) {
+                const stepsHtml = s.steps.map(function (step) {
                     return '<li>' + escapeHtml(step) + '</li>';
                 }).join('');
 
                 return '<div style="margin-bottom:12px;padding:10px;background:var(--vscode-textCodeBlock-background);border-radius:4px;">'
                     + '<span class="tag ' + tagClass + '">' + escapeHtml(s.tag) + '</span> '
                     + '<strong>' + escapeHtml(s.title) + '</strong>'
-                    + '<ol style="margin-top:6px;">' + stepsHtml + '</ol>'
+                    + '<ol style="margin:6px 0 6px 20px;">' + stepsHtml + '</ol>'
                     + '<div style="margin-top:6px;"><strong>Expected:</strong> ' + escapeHtml(s.expected) + '</div>'
                     + '</div>';
             }).join('');
             document.getElementById('testScenarios').innerHTML = scenariosHtml;
 
-            // Manual tests
             document.getElementById('manualTests').textContent = data.analysis.manualTestsMd;
-
-            // Gherkin
             document.getElementById('gherkinCode').textContent = data.analysis.gherkin;
-
-            // Cypress
             document.getElementById('cypressCode').textContent = data.analysis.cypressPseudo;
-
-            // Playwright
             document.getElementById('playwrightCode').textContent = data.analysis.playwrightPseudo;
 
+            showTab('story');
             document.getElementById('results').classList.add('visible');
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function showError(message) {
@@ -491,7 +771,7 @@ export class AnalyzerPanel {
             el.classList.add('visible');
         }
 
-        window.addEventListener('message', function(event) {
+        window.addEventListener('message', function (event) {
             const message = event.data;
 
             switch (message.command) {
@@ -511,7 +791,8 @@ export class AnalyzerPanel {
         });
     </script>
 </body>
-</html>`;
+</html>
+`;
     }
 
     public dispose() {

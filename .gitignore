@@ -39,4 +39,5 @@ Thumbs.db
 .agent/memory/
 # Keep the main .agent configuration, but ignore runtime/temp data if any
 improve shopping prompt/
+# Packaged extension artifacts
 *.vsix

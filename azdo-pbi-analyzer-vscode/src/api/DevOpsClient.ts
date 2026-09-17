@@ -2,6 +2,72 @@ import * as azdev from 'azure-devops-node-api';
 import * as workItemTrackingInterfaces from 'azure-devops-node-api/interfaces/WorkItemTrackingInterfaces';
 import { IWorkItemTrackingApi } from 'azure-devops-node-api/WorkItemTrackingApi';
 
+/** Default ceiling for a single Azure DevOps API call. */
+export const DEFAULT_ADO_TIMEOUT_MS = 30_000;
+
+export type AzdoErrorCode = 'auth' | 'not-found' | 'network' | 'timeout' | 'unknown';
+
+/**
+ * Typed error for Azure DevOps API failures. Lets callers distinguish an
+ * expired PAT (auth) from a bad work-item ID (not-found) from connectivity
+ * problems — and guarantees the PAT itself never leaks into messages.
+ */
+export class AzdoApiError extends Error {
+    constructor(message: string, public readonly code: AzdoErrorCode) {
+        super(message);
+        this.name = 'AzdoApiError';
+    }
+}
+
+/** Rejects if `promise` does not settle within `ms`. */
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new AzdoApiError(`${label} timed out after ${ms / 1000}s`, 'timeout')), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => {
+        if (timer !== undefined) {
+            clearTimeout(timer);
+        }
+    });
+}
+
+/** Maps a raw transport error to a typed AzdoApiError (never includes secrets). */
+export function toAzdoApiError(e: unknown, label: string): AzdoApiError {
+    if (e instanceof AzdoApiError) {
+        return e;
+    }
+    const statusCode =
+        typeof (e as { statusCode?: unknown }).statusCode === 'number'
+            ? (e as { statusCode: number }).statusCode
+            : undefined;
+    const message = scrubSecrets(e instanceof Error ? e.message : String(e));
+
+    if (statusCode === 401 || statusCode === 403 || /401|unauthorized|expired/i.test(message)) {
+        return new AzdoApiError(
+            `${label}: Azure DevOps rejected the request (HTTP ${statusCode ?? '401'}). Your PAT may be expired or lack Work Item read scope.`,
+            'auth'
+        );
+    }
+    if (statusCode === 404 || /404|not found/i.test(message)) {
+        return new AzdoApiError(`${label}: work item not found (HTTP 404). Check the ID and project.`, 'not-found');
+    }
+    if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|network|fetch failed/i.test(message)) {
+        return new AzdoApiError(`${label}: network error reaching Azure DevOps. Check your connection and proxy settings.`, 'network');
+    }
+    return new AzdoApiError(`${label}: ${message}`, 'unknown');
+}
+
+/**
+ * Strips credential-looking material (Basic auth headers, long base64 blobs)
+ * from error text before it can reach logs or the UI.
+ */
+export function scrubSecrets(text: string): string {
+    return text
+        .replace(/Basic\s+[A-Za-z0-9+/=]{16,}/g, 'Basic [redacted]')
+        .replace(/Bearer\s+[A-Za-z0-9\-._~+/=]{16,}/g, 'Bearer [redacted]');
+}
+
 export class DevOpsClient {
     private _connection: azdev.WebApi;
     private _workItemTrackingApi: Promise<IWorkItemTrackingApi>;
@@ -12,37 +78,78 @@ export class DevOpsClient {
         this._workItemTrackingApi = this._connection.getWorkItemTrackingApi();
     }
 
-    public static parsePbiUrl(pbiUrl: string): { orgUrl: string; project: string; id: number } | null {
-        try {
-            const url = new URL(pbiUrl);
-            const pathParts = url.pathname.split('/').filter((p) => p);
+    /**
+     * Parses a PBI reference into { orgUrl, project, id }.
+     *
+     * Accepts:
+     * - Full work-item URLs: https://dev.azure.com/{org}/{project}/_workitems/edit/{id}
+     * - Legacy visualstudio.com URLs
+     * - Board URLs carrying ?workitem={id} (or ?id={id})
+     * - On-premises TFS/Azure DevOps Server URLs
+     * - A bare numeric ID (uses defaultOrgUrl when supplied)
+     */
+    public static parsePbiUrl(
+        pbiUrl: string,
+        defaultOrgUrl?: string
+    ): { orgUrl: string; project: string; id: number } | null {
+        const trimmed = (pbiUrl || '').trim();
 
-            let org = '';
-            let project = '';
-            let id = 0;
-            let orgUrl = '';
+        // Bare numeric ID, e.g. "12345"
+        if (/^\d+$/.test(trimmed)) {
+            const orgUrl = (defaultOrgUrl || '').trim().replace(/\/+$/, '');
+            if (!orgUrl) {
+                return null;
+            }
+            return { orgUrl, project: '', id: parseInt(trimmed, 10) };
+        }
+
+        try {
+            const url = new URL(trimmed);
+            const pathParts = url.pathname.split('/').filter((p) => p);
+            const queryId = url.searchParams.get('workitem') || url.searchParams.get('id');
+            const numericQueryId =
+                queryId && /^\d+$/.test(queryId) ? parseInt(queryId, 10) : null;
+
+            const editIndex = pathParts.findIndex(
+                (p, i) => p === '_workitems' && pathParts[i + 1] === 'edit'
+            );
+            const editId =
+                editIndex >= 0 && /^\d+$/.test(pathParts[editIndex + 2] || '')
+                    ? parseInt(pathParts[editIndex + 2], 10)
+                    : null;
+
+            const id = editId ?? numericQueryId;
+            if (!id) {
+                return null;
+            }
 
             if (url.hostname === 'dev.azure.com') {
-                if (pathParts.length >= 5 && pathParts[2] === '_workitems' && pathParts[3] === 'edit') {
-                    org = pathParts[0];
-                    project = pathParts[1];
-                    id = parseInt(pathParts[4]);
-                    orgUrl = `https://dev.azure.com/${org}`;
+                const org = pathParts[0];
+                const project = pathParts[1] && pathParts[1] !== '_workitems' ? pathParts[1] : '';
+                if (!org) {
+                    return null;
                 }
-            } else if (url.hostname.endsWith('.visualstudio.com')) {
-                if (pathParts.length >= 4 && pathParts[1] === '_workitems' && pathParts[2] === 'edit') {
-                    org = url.hostname.split('.')[0];
-                    project = pathParts[0];
-                    id = parseInt(pathParts[3]);
-                    orgUrl = `https://${org}.visualstudio.com`;
-                }
+                return { orgUrl: `https://dev.azure.com/${org}`, project, id };
             }
 
-            if (org && project && id) {
-                return { orgUrl, project, id };
+            if (url.hostname.endsWith('.visualstudio.com')) {
+                const org = url.hostname.split('.')[0];
+                const project = pathParts[0] && pathParts[0] !== '_workitems' ? pathParts[0] : '';
+                return { orgUrl: `https://${org}.visualstudio.com`, project, id };
             }
 
-            return null;
+            // On-premises TFS / Azure DevOps Server:
+            // http(s)://server[:port]/tfs/{collection}/{project}/_workitems/edit/{id}
+            // or http(s)://server[:port]/{collection}/{project}/_workitems/edit/{id}
+            const tfsIndex = pathParts.findIndex((p) => p.toLowerCase() === 'tfs');
+            const baseParts = tfsIndex >= 0 ? pathParts.slice(0, tfsIndex + 2) : pathParts.slice(0, 1);
+            const projectIndex = editIndex >= 0 ? editIndex - 1 : baseParts.length;
+            const project =
+                projectIndex >= baseParts.length && pathParts[projectIndex] && !pathParts[projectIndex].startsWith('_')
+                    ? pathParts[projectIndex]
+                    : '';
+            const orgUrl = `${url.protocol}//${url.host}/${baseParts.join('/')}`;
+            return { orgUrl, project, id };
         } catch {
             return null;
         }
@@ -54,16 +161,19 @@ export class DevOpsClient {
     ): Promise<workItemTrackingInterfaces.WorkItem | null> {
         try {
             const client = await this._workItemTrackingApi;
-            const workItem = await client.getWorkItem(
-                id,
-                undefined,
-                undefined,
-                workItemTrackingInterfaces.WorkItemExpand.Relations
+            const workItem = await withTimeout(
+                client.getWorkItem(
+                    id,
+                    undefined,
+                    undefined,
+                    workItemTrackingInterfaces.WorkItemExpand.Relations
+                ),
+                DEFAULT_ADO_TIMEOUT_MS,
+                `Fetching work item ${id}`
             );
             return workItem;
         } catch (e) {
-            console.error(`Error fetching work item ${id}:`, e);
-            throw e;
+            throw toAzdoApiError(e, `Fetching work item ${id}`);
         }
     }
 
@@ -148,6 +258,20 @@ export class DevOpsClient {
         maxDepth: number = 3,
         visited: Set<number> = new Set()
     ): Promise<WorkItemTree | null> {
+        return this.getWorkItemTree(id, maxDepth, visited, true);
+    }
+
+    /**
+     * Recursive worker. Nested failures are swallowed (a single bad link must
+     * not kill the whole tree), but the root call's error propagates typed so
+     * callers can tell an expired PAT from a bad work-item ID.
+     */
+    private async getWorkItemTree(
+        id: number,
+        maxDepth: number,
+        visited: Set<number>,
+        isRoot: boolean
+    ): Promise<WorkItemTree | null> {
         if (maxDepth <= 0 || visited.has(id)) {
             return null;
         }
@@ -176,7 +300,7 @@ export class DevOpsClient {
             if (parentRel && parentRel.url) {
                 const parentId = this.extractIdFromUrl(parentRel.url);
                 if (parentId && !visited.has(parentId)) {
-                    tree.parent = await this.getWorkItemRecursively(parentId, maxDepth - 1, visited);
+                    tree.parent = await this.getWorkItemTree(parentId, maxDepth - 1, visited, false);
                 }
             }
 
@@ -189,7 +313,7 @@ export class DevOpsClient {
                 if (childRel.url) {
                     const childId = this.extractIdFromUrl(childRel.url);
                     if (childId && !visited.has(childId)) {
-                        const childTree = await this.getWorkItemRecursively(childId, maxDepth - 1, visited);
+                        const childTree = await this.getWorkItemTree(childId, maxDepth - 1, visited, false);
                         if (childTree) {
                             tree.children.push(childTree);
                         }
@@ -224,7 +348,12 @@ export class DevOpsClient {
 
             return tree;
         } catch (e) {
-            console.error(`Error recursively fetching work item ${id}:`, e);
+            if (isRoot) {
+                throw toAzdoApiError(e, `Fetching work item ${id}`);
+            }
+            // Swallow nested per-item failures (already typed upstream).
+            // Never log raw errors here — they can carry auth material
+            // from the transport layer.
             return null;
         }
     }
