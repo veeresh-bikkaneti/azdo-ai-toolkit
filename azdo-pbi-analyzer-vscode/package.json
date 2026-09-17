@@ -119,11 +119,11 @@
   "scripts": {
     "release": "npm version patch && vsce package",
     "vscode:prepublish": "npm run package",
-    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
-    "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && node scripts/copy-agent-assets.js",
+    "watch": "node scripts/copy-agent-assets.js && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "package": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && node scripts/copy-agent-assets.js",
     "test": "npm run test-compile && node ./out/test/runTest.js",
-    "test:unit": "mocha -r ts-node/register --ui tdd src/test/suite/generators.test.ts src/test/suite/ai-providers.test.ts",
+    "test:unit": "mocha -r ts-node/register --ui tdd src/test/suite/generators.test.ts src/test/suite/ai-providers.test.ts src/test/suite/devops-client.test.ts",
     "test-compile": "tsc -p ./"
   },
   "devDependencies": {

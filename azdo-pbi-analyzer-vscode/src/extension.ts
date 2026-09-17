@@ -12,6 +12,10 @@ export function activate(context: vscode.ExtensionContext) {
     chatParticipant.setAiResolver(() => resolveAiProvider(context));
     chatParticipant.initialize();
 
+    // Hand analyzed PBIs from the panel to the chat participant so @azdo
+    // commands operate on the PBI you just analyzed.
+    AnalyzerPanel.onDidAnalyzePbi = (pbi) => chatParticipant.setCurrentPbi(pbi);
+
     // Register command to analyze PBI
     const analyzePbiCommand = vscode.commands.registerCommand(
         'azdoPbiAnalyzer.analyzePbi',

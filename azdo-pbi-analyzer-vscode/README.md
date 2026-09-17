@@ -6,9 +6,34 @@ Analyze Azure DevOps Product Backlog Items (PBIs) to generate test scenarios, Gh
 
 - 🔄 **Deep Analysis**: Recursively fetch work items with full hierarchy (parents, children, dependencies)
 - 🧠 **AI-Driven Gap Analysis**: Detect missing NFRs, contradictions, edge cases, and integration gaps
-- 🎭 **Multi-Persona QA Analysis**: Copilot Chat with 6 QA personas
-- 🤖 **27 AI Agents**: Install expert agents for testing, architecture, debugging, and more
+- 🎭 **Multi-Persona QA Analysis**: Chat (`@azdo.pbi-analyst`) with 6 QA personas, powered by your choice of AI provider
+- 🤖 **11 AI Agents**: Install expert agents, skills, and workflows for testing, architecture, and automation
 - 📝 **Auto-Generated Tests**: Gherkin, Cypress, Playwright, and Manual test cases
+
+## 🧠 AI Providers
+
+The chat personas can stream real answers from your AI provider of choice.
+Configure it in VS Code settings (`Ctrl+,` → search "PBI Analyzer"):
+
+| Setting | Values | Notes |
+|---------|--------|-------|
+| `azdoPbiAnalyzer.aiEnabled` | `true` / `false` | Master switch (default `true`) |
+| `azdoPbiAnalyzer.aiProvider` | `vscode`, `openai-compatible`, `anthropic`, `gemini` | Default `vscode` |
+| `azdoPbiAnalyzer.aiModel` | e.g. `gpt-4o-mini`, `claude-sonnet-4-5` | Optional; provider default when blank |
+| `azdoPbiAnalyzer.aiEndpoint` | Custom base URL | Required for self-hosted endpoints |
+
+- **`vscode`** — uses VS Code's built-in language models (e.g. Copilot). No API key needed.
+- **`openai-compatible`** — any OpenAI-style chat-completions endpoint: OpenAI, Azure OpenAI (deployment URL), Ollama, LM Studio, OpenRouter, Together, DeepSeek, and more. Set the base URL in `aiEndpoint`.
+- **`anthropic`** — Claude Messages API (`https://api.anthropic.com` by default).
+- **`gemini`** — Google Generative Language API.
+
+API keys are stored in VS Code Secret Storage (never in settings files):
+
+- Command palette → `Azure DevOps: Set AI Provider API Key`
+- Command palette → `Azure DevOps: Clear AI Provider API Key`
+
+With no provider or key configured, personas fall back to built-in heuristic
+analysis, so chat always responds.
 
 ---
 
@@ -34,13 +59,13 @@ Analyze Azure DevOps Product Backlog Items (PBIs) to generate test scenarios, Gh
 
 2. **Use with GitHub Copilot** (Free or Paid):
    ```
-   #file:.agent/agents/qa-engineer.md
+   #file:.agent/agents/qa-automation-engineer.md
    
    Create test cases for: [Your PBI]
    ```
 
 3. **OR Copy-Paste to Any AI**:
-   - Open `.agent/agents/qa-engineer.md`
+   - Open `.agent/agents/qa-automation-engineer.md`
    - Copy entire content
    - Paste into ChatGPT/Claude/Gemini
    - Add your question below
@@ -64,32 +89,43 @@ Analyze Azure DevOps Product Backlog Items (PBIs) to generate test scenarios, Gh
 
 **Example**:
 ```
-@azdo /analyze
+@azdo.pbi-analyst /analyze
 
 [Your PBI details]
 ```
 
+**Tip**: analyze a PBI in the panel first (`QA the PBI`) — the chat
+participant picks up that PBI automatically, so the personas answer about
+*your* work item instead of asking you to paste it again.
+
+Personas stream answers from your configured AI provider (see
+[AI Providers](#-ai-providers) below). With no provider configured, they fall
+back to built-in heuristic analysis so they always produce something useful.
+
 ---
 
-## 🤖 Available AI Agents (27 Total)
+## 🤖 Available AI Agents (11 Total)
+
+Run `Azure DevOps: Install AI Agents and Workflows` to drop a ready-to-use
+`.agent/` folder into your workspace (agents, skills, workflows, docs).
 
 **QA Specialists**:
-- 🧠 Critical Thinker - Requirements analysis, assumption identification
-- 🎭 QA Orchestrator - Coordinates personas, synthesizes insights
-- 🧪 QA Engineer - Test case design, functional testing
-- 🏗️ QA Architect - Testing strategy, framework selection
-- 🔍 Manual Tester - Exploratory testing, UX validation
-- ⚙️ Automation Engineer - Test automation, CI/CD integration
+- 🧠 Test Architect - Testing strategy, PBI analysis, automation planning
+- 🎭 Orchestrator - Routes work across the other agents
+- 🧪 QA Automation Engineer - Test automation design and implementation
+- 🌲 Cypress Agent - Cypress-specific test authoring
+- 🎭 Playwright Agent - Playwright-specific test authoring
 
-**Development Specialists**:
-- 🎨 Frontend Specialist - UI/UX, React, TypeScript
-- 🔧 Backend Specialist - APIs, databases, architecture
-- 📱 Mobile Developer - iOS, Android, React Native
-- 🛡️ Security Auditor - Vulnerability scanning, compliance
-- 🐛 Debugger - Root cause analysis, troubleshooting
-- 📊 Database Architect - Schema design, optimization
+**Delivery Specialists**:
+- 📝 Product Owner - User stories and acceptance criteria
+- 📊 Project Planner - Breaking epics into sequenced work
+- 🏗️ Automation Architect - Automation framework design
+- 🔧 Backend Specialist - APIs and backend implementation
+- 🛠️ DevOps Engineer - CI/CD pipelines and environments
+- 🛡️ Security Auditor - Security review of code and tests
 
-**... and 15 more!** See `.agent/agents/` folder.
+**Also included**: 3 skills (`story-analysis`, `test-planning`, `automation`),
+2 workflows (`analyze-pbi`, `pbi-to-automation`), and `ARCHITECTURE.md`.
 
 ---
 
@@ -99,7 +135,7 @@ Analyze Azure DevOps Product Backlog Items (PBIs) to generate test scenarios, Gh
 
 **In Copilot Chat**:
 ```
-#file:.agent/agents/critical-thinker.md
+#file:.agent/agents/test-architect.md
 
 Analyze this PBI:
 "Users can reset password securely"
@@ -107,7 +143,7 @@ Analyze this PBI:
 
 ### For ChatGPT / Claude / Gemini Users
 
-1. Open `.agent/agents/critical-thinker.md`
+1. Open `.agent/agents/test-architect.md`
 2. Copy all content
 3. Paste into AI chat
 4. Add your question
@@ -176,7 +212,7 @@ Acceptance Criteria:
 
 ### Example 2: Using Agents with ChatGPT Free
 
-**Step 1**: Copy `.agent/agents/qa-engineer.md` content
+**Step 1**: Copy `.agent/agents/qa-automation-engineer.md` content
 
 **Step 2**: Paste into ChatGPT:
 ```
@@ -218,12 +254,17 @@ Each agent prompt includes:
 
 ## 🔧 Configuration
 
-**Settings** (`Ctrl+,`):
-- `Azure DevOps PBI Analyzer: Organization` - Default org URL
+**Settings** (`Ctrl+,`, search "PBI Analyzer"):
+- `azdoPbiAnalyzer.organization` - Default org URL (lets you paste a bare work-item ID)
+- `azdoPbiAnalyzer.aiEnabled` - Master switch for AI-powered chat personas
+- `azdoPbiAnalyzer.aiProvider` - `vscode` (default) | `openai-compatible` | `anthropic` | `gemini`
+- `azdoPbiAnalyzer.aiModel` - Model name override (optional)
+- `azdoPbiAnalyzer.aiEndpoint` - Custom base URL for `openai-compatible` (e.g. Ollama, Azure OpenAI)
 
 **Azure DevOps PAT**:
 - Required for API access
 - Scopes: Work Items (Read)
+- Resolution order: panel input → VS Code Secret Storage → `AZDO_PAT` in workspace `.env`
 - Stored securely in VS Code Secret Storage
 
 ---

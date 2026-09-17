@@ -10,8 +10,8 @@ vsc-extension-quickstart.md
 **/*.ts
 tsconfig.json
 
-# AI/Agent Artifacts
-.agent/**
+# AI/Agent source artifacts (kept in repo, never packaged)
+agent-assets/**
 Agent_*.md
 GEMINI.md
 ARCHITECTURE.md
