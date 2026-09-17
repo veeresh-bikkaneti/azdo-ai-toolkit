@@ -3,6 +3,7 @@
  * Docs: https://docs.anthropic.com/en/api/messages
  */
 import { CancellationLike, ChatMessage, ILlmProvider, LlmError, LlmOptions, TokenCallback } from '../types';
+import { createRequestAborter, toAbortError, DEFAULT_LLM_TIMEOUT_MS } from './requestAborter';
 
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -33,17 +34,13 @@ export class AnthropicProvider implements ILlmProvider {
             .filter((m) => m.role !== 'system')
             .map((m) => ({ role: m.role, content: m.content }));
 
-        const controller = new AbortController();
-        const onCancelPoll = setInterval(() => {
-            if (cancel?.isCancellationRequested) {
-                controller.abort();
-            }
-        }, 100);
+        const timeoutMs = options.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS;
+        const aborter = createRequestAborter(cancel, timeoutMs);
 
         try {
             const response = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
-                signal: controller.signal,
+                signal: aborter.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'x-api-key': this.apiKey,
@@ -80,9 +77,13 @@ export class AnthropicProvider implements ILlmProvider {
             if (e instanceof LlmError) {
                 throw e;
             }
+            const aborted = toAbortError(e, this.id, aborter.timedOut, timeoutMs);
+            if (aborted) {
+                throw aborted;
+            }
             throw new LlmError(`Anthropic request failed: ${e instanceof Error ? e.message : String(e)}`, this.id);
         } finally {
-            clearInterval(onCancelPoll);
+            aborter.dispose();
         }
     }
 }

@@ -24,6 +24,11 @@ export interface LlmOptions {
     temperature?: number;
     /** Cap on generated tokens. */
     maxTokens?: number;
+    /**
+     * Hard ceiling for the request in milliseconds (OWASP LLM04).
+     * Providers fall back to 60s when omitted.
+     */
+    timeoutMs?: number;
 }
 
 /** Minimal structural stand-in for vscode.CancellationToken (keeps this module vscode-free). */

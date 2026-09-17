@@ -265,7 +265,18 @@ Each agent prompt includes:
 - Required for API access
 - Scopes: Work Items (Read)
 - Resolution order: panel input → VS Code Secret Storage → `AZDO_PAT` in workspace `.env`
-- Stored securely in VS Code Secret Storage
+- Stored securely in VS Code Secret Storage. Prefer the panel input / Secret Storage over `.env` — a plaintext `.env` is the least-secure option and should be gitignored.
+
+## 🔒 Security
+
+This extension follows the OWASP guidance in this repo's `AI_Initiative_Docs/OWASP_AI_SECURITY.md`:
+
+- **Secrets stay secret.** PATs and API keys live in VS Code Secret Storage (OS keychain). Error messages never include credentials, and transport errors are scrubbed of `Basic`/`Bearer` material before display.
+- **AI data sharing is opt-in.** The first time an AI persona would send your PBI's content to a model endpoint, the extension asks for consent (dismissible, remembered). Declining falls back to the offline rule-based heuristics.
+- **Prompt-injection boundaries (LLM01).** PBI text and your questions are treated as untrusted *data*: they are wrapped in explicit `"""` delimiters and the system prompt instructs the model never to follow instructions embedded in them.
+- **Timeouts (LLM04).** AI provider requests time out after 60s; Azure DevOps calls after 30s. A hung endpoint can't wedge the extension.
+- **Typed failures.** Expired PATs (401/403), bad work-item IDs (404), timeouts, and network errors surface as distinct, actionable messages instead of one generic error.
+- **Webview hardening (LLM02).** The results webview runs under a restrictive Content Security Policy, validates incoming messages, and AI-generated content is never executed — only rendered as Markdown/text.
 
 ---
 

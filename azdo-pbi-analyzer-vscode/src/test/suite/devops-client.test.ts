@@ -99,3 +99,94 @@ suite('DevOpsClient (mocked API)', () => {
         assert.strictEqual(related[0].id, 1);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 2: typed errors, timeouts, secret scrubbing
+// ---------------------------------------------------------------------------
+
+import {
+    AzdoApiError,
+    toAzdoApiError,
+    withTimeout,
+    scrubSecrets,
+} from '../../api/DevOpsClient';
+
+suite('AzdoApiError typing', () => {
+    test('401 maps to auth with a PAT-hint message', () => {
+        const err = toAzdoApiError(Object.assign(new Error('Unauthorized'), { statusCode: 401 }), 'Fetching work item 1');
+        assert.ok(err instanceof AzdoApiError);
+        assert.strictEqual(err.code, 'auth');
+        assert.ok(/PAT/i.test(err.message));
+    });
+
+    test('404 maps to not-found', () => {
+        const err = toAzdoApiError(Object.assign(new Error('Not Found'), { statusCode: 404 }), 'x');
+        assert.strictEqual(err.code, 'not-found');
+    });
+
+    test('DNS/connection failures map to network', () => {
+        const err = toAzdoApiError(new Error('getaddrinfo ENOTFOUND dev.azure.com'), 'x');
+        assert.strictEqual(err.code, 'network');
+    });
+
+    test('unknown errors keep a generic code', () => {
+        const err = toAzdoApiError(new Error('weird transport failure'), 'x');
+        assert.strictEqual(err.code, 'unknown');
+    });
+
+    test('scrubSecrets redacts Basic and Bearer credentials', () => {
+        const dirty = 'failed with header Basic OmZha2UtcGF0LXRva2VuLXNlY3JldA== and Bearer abcdefghijklmnop.qrs';
+        const clean = scrubSecrets(dirty);
+        assert.ok(!clean.includes('OmZha2UtcGF0LXRva2VuLXNlY3JldA=='));
+        assert.ok(clean.includes('Basic [redacted]'));
+        assert.ok(clean.includes('Bearer [redacted]'));
+    });
+
+    test('root recursive fetch propagates typed auth error', async () => {
+        const client = new DevOpsClient('https://dev.azure.com/org', 'fake-pat');
+        (client as unknown as { _workItemTrackingApi: Promise<unknown> })._workItemTrackingApi =
+            Promise.resolve({
+                getWorkItem: async () => {
+                    throw Object.assign(new Error('Unauthorized'), { statusCode: 401 });
+                },
+            });
+        await assert.rejects(client.getWorkItemRecursively(1), (e: unknown) => {
+            return e instanceof AzdoApiError && e.code === 'auth';
+        });
+    });
+
+    test('nested recursive failures are swallowed, root error is not', async () => {
+        const root = wi(700, 'Root PBI', [relTo(999, 'System.LinkTypes.Hierarchy-Reverse', 'Parent')]);
+        const client = new DevOpsClient('https://dev.azure.com/org', 'fake-pat');
+        (client as unknown as { _workItemTrackingApi: Promise<unknown> })._workItemTrackingApi =
+            Promise.resolve({
+                getWorkItem: async (id: number) => {
+                    if (id === 999) {
+                        throw Object.assign(new Error('Unauthorized'), { statusCode: 401 });
+                    }
+                    const item = new Map([[700, root]]).get(id);
+                    if (!item) {
+                        throw new Error(`not found: ${id}`);
+                    }
+                    return item;
+                },
+            });
+        const tree = await client.getWorkItemRecursively(700);
+        assert.ok(tree);
+        assert.strictEqual(tree.parent, null);
+    });
+});
+
+suite('withTimeout', () => {
+    test('resolves when the promise settles in time', async () => {
+        const result = await withTimeout(Promise.resolve(42), 1000, 'test');
+        assert.strictEqual(result, 42);
+    });
+
+    test('rejects with a typed timeout error when the promise hangs', async () => {
+        const hanging = new Promise<never>(() => {});
+        await assert.rejects(withTimeout(hanging, 30, 'Fetching work item 9'), (e: unknown) => {
+            return e instanceof AzdoApiError && e.code === 'timeout' && /30|0\.03/.test(e.message);
+        });
+    });
+});

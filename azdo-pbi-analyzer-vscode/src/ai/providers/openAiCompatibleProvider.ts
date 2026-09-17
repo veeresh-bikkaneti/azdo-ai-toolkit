@@ -10,6 +10,7 @@
  * (the api-version query is appended automatically when missing).
  */
 import { CancellationLike, ChatMessage, ILlmProvider, LlmError, LlmOptions, TokenCallback } from '../types';
+import { createRequestAborter, toAbortError, DEFAULT_LLM_TIMEOUT_MS } from './requestAborter';
 
 export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -53,17 +54,13 @@ export class OpenAiCompatibleProvider implements ILlmProvider {
         }
 
         const model = options.model || this.defaultModel;
-        const controller = new AbortController();
-        const onCancelPoll = setInterval(() => {
-            if (cancel?.isCancellationRequested) {
-                controller.abort();
-            }
-        }, 100);
+        const timeoutMs = options.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS;
+        const aborter = createRequestAborter(cancel, timeoutMs);
 
         try {
             const response = await fetch(this.resolveUrl(), {
                 method: 'POST',
-                signal: controller.signal,
+                signal: aborter.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${this.apiKey}`,
@@ -99,12 +96,16 @@ export class OpenAiCompatibleProvider implements ILlmProvider {
             if (e instanceof LlmError) {
                 throw e;
             }
+            const aborted = toAbortError(e, this.id, aborter.timedOut, timeoutMs);
+            if (aborted) {
+                throw aborted;
+            }
             throw new LlmError(
                 `OpenAI-compatible request failed: ${e instanceof Error ? e.message : String(e)}`,
                 this.id
             );
         } finally {
-            clearInterval(onCancelPoll);
+            aborter.dispose();
         }
     }
 

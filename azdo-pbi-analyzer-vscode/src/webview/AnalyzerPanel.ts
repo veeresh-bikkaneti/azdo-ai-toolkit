@@ -1,8 +1,35 @@
 import * as vscode from 'vscode';
-import { DevOpsClient } from '../api/DevOpsClient';
+import { DevOpsClient, AzdoApiError } from '../api/DevOpsClient';
 import { PbiAnalyzer, AnalysisResult, PbiContext } from '../analyzers/PbiAnalyzer';
 import { OutputWriter } from '../output/OutputWriter';
 import { readEnvValue } from '../utils/envReader';
+
+/**
+ * Converts internal errors into safe, actionable user messages.
+ * Typed AzdoApiErrors already carry user-safe text; anything else is
+ * collapsed to a generic message so transport internals (which can include
+ * auth material) never reach the webview.
+ */
+function toUserFacingError(error: unknown): string {
+    if (error instanceof AzdoApiError) {
+        switch (error.code) {
+            case 'auth':
+                return (
+                    '🔑 Azure DevOps rejected your credentials. Your PAT may be expired or lack "Work Items (Read)" scope. ' +
+                    'Generate a new PAT and enter it in the panel — it will be stored securely.'
+                );
+            case 'not-found':
+                return '🔍 Work item not found. Check the ID/URL and make sure the project is correct.';
+            case 'timeout':
+                return '⏱️ Azure DevOps took too long to respond. Check your connection and try again.';
+            case 'network':
+                return '🌐 Could not reach Azure DevOps. Check your network connection and proxy settings.';
+            default:
+                return `❌ ${error.message}`;
+        }
+    }
+    return '❌ Failed to analyze the PBI. Check the URL and try again.';
+}
 
 export class AnalyzerPanel {
     public static currentPanel: AnalyzerPanel | undefined;
@@ -60,15 +87,20 @@ export class AnalyzerPanel {
 
         this._panel.webview.onDidReceiveMessage(
             async (message) => {
+                // Validate the message envelope: the webview only ever sends
+                // known commands with string payloads.
+                if (!message || typeof message.command !== 'string') {
+                    return;
+                }
                 switch (message.command) {
                     case 'analyzePbi':
-                        await this._handleAnalyzePbi(message.pbiUrl, message.pat);
+                        await this._handleAnalyzePbi(String(message.pbiUrl ?? ''), String(message.pat ?? ''));
                         break;
                     case 'error':
-                        vscode.window.showErrorMessage(message.text);
+                        vscode.window.showErrorMessage(String(message.text ?? 'Unknown error'));
                         break;
                     case 'info':
-                        vscode.window.showInformationMessage(message.text);
+                        vscode.window.showInformationMessage(String(message.text ?? ''));
                         break;
                 }
             },
@@ -82,22 +114,23 @@ export class AnalyzerPanel {
     }
 
     private async _resolvePat(userProvidedPat: string): Promise<string> {
-        // 1. User-provided PAT
+        // 1. User-provided PAT (also remembered for next time)
         if (userProvidedPat) {
             await this._context.secrets.store(AnalyzerPanel.patKey, userProvidedPat);
             return userProvidedPat;
         }
 
-        // 2. .env file in workspace root
-        const envPat = readEnvValue('AZDO_PAT');
-        if (envPat) {
-            return envPat;
-        }
-
-        // 3. VS Code secrets store
+        // 2. VS Code Secret Storage (OS keychain — preferred over plaintext)
         const storedPat = await this._context.secrets.get(AnalyzerPanel.patKey);
         if (storedPat) {
             return storedPat;
+        }
+
+        // 3. .env file in workspace root (least secure: plaintext on disk —
+        //    convenient for automation, but SecretStorage is preferred)
+        const envPat = readEnvValue('AZDO_PAT');
+        if (envPat) {
+            return envPat;
         }
 
         throw new Error(
@@ -166,7 +199,7 @@ export class AnalyzerPanel {
         } catch (error: any) {
             this._panel.webview.postMessage({
                 command: 'error',
-                message: error.message || 'Failed to analyze PBI',
+                message: toUserFacingError(error),
             });
         }
     }
@@ -195,6 +228,9 @@ export class AnalyzerPanel {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- Defense in depth: this webview uses only inline styles/scripts and
+         loads no external resources, so lock everything else down. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azure DevOps PBI Analyzer</title>
     <style>

@@ -7,6 +7,8 @@ export class PbiChatParticipant {
     private _participant: vscode.ChatParticipant | undefined;
     private _currentPbi: PbiContext | null = null;
     private _aiResolver?: () => Promise<AiResolution>;
+    /** Persisted once the user acknowledges AI data sharing. */
+    private static readonly consentKey = 'azdoPbiAnalyzer.aiDataSharingConsent';
 
     constructor(private context: vscode.ExtensionContext) { }
 
@@ -98,6 +100,27 @@ export class PbiChatParticipant {
      * to the built-in rule-based heuristics (provider not configured, or the
      * call failed and the failure was already surfaced to the user).
      */
+    /**
+     * One-time, dismissible notice that AI personas send the analyzed PBI's
+     * content to the configured model endpoint. Declining falls back to the
+     * offline heuristics; consent is remembered in global state.
+     */
+    private async ensureAiConsent(providerName: string): Promise<boolean> {
+        if (this.context.globalState.get<boolean>(PbiChatParticipant.consentKey)) {
+            return true;
+        }
+        const choice = await vscode.window.showInformationMessage(
+            `The ${providerName} persona will send this PBI's title, description, and acceptance criteria to ${providerName} for analysis.`,
+            'Continue',
+            'Not now'
+        );
+        if (choice === 'Continue') {
+            await this.context.globalState.update(PbiChatParticipant.consentKey, true);
+            return true;
+        }
+        return false;
+    }
+
     private async tryAiPersona(
         persona: PersonaId,
         pbi: PbiContext,
@@ -119,6 +142,12 @@ export class PbiChatParticipant {
         const provider = resolution.provider;
         if (!provider) {
             // Not configured (or disabled): silent fallback to heuristics.
+            return false;
+        }
+
+        // OWASP LLM06: PBI content may be sensitive internal data. Get explicit
+        // one-time consent before sending it to the model endpoint.
+        if (!(await this.ensureAiConsent(provider.displayName))) {
             return false;
         }
 
